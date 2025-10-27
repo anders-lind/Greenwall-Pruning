@@ -1,0 +1,37 @@
+[0.867s] Invoking command in '/home/alex/Greenwall/Greenwall-Pruning/src/cdpr_control_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/cdpr_control_pkg build --build-base /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build install --record /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data
+[1.136s] running egg_info
+[1.136s] creating ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info
+[1.156s] writing ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/PKG-INFO
+[1.156s] writing dependency_links to ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/dependency_links.txt
+[1.156s] writing entry points to ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/entry_points.txt
+[1.156s] writing requirements to ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/requires.txt
+[1.157s] writing top-level names to ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/top_level.txt
+[1.157s] writing manifest file '../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.197s] reading manifest file '../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.197s] writing manifest file '../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.197s] running build
+[1.197s] running build_py
+[1.197s] creating /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build
+[1.197s] creating /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib
+[1.198s] creating /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.198s] copying cdpr_control_pkg/__init__.py -> /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.198s] copying cdpr_control_pkg/cdpr_control_joystick.py -> /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.198s] running install
+[1.204s] running install_lib
+[1.222s] creating /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.222s] copying /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/__init__.py -> /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.222s] copying /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/cdpr_control_joystick.py -> /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.223s] byte-compiling /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/__init__.py to __init__.cpython-312.pyc
+[1.223s] byte-compiling /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/cdpr_control_joystick.py to cdpr_control_joystick.cpython-312.pyc
+[1.223s] running install_data
+[1.223s] creating /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/share/ament_index
+[1.223s] creating /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/share/ament_index/resource_index
+[1.223s] creating /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/share/ament_index/resource_index/packages
+[1.223s] copying resource/cdpr_control_pkg -> /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/share/ament_index/resource_index/packages
+[1.224s] copying package.xml -> /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/share/cdpr_control_pkg
+[1.224s] running install_egg_info
+[1.243s] Copying ../../build/cdpr_control_pkg/cdpr_control_pkg.egg-info to /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info
+[1.243s] running install_scripts
+[1.359s] Installing cdpr_control_joystick script to /home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.359s] writing list of installed files to '/home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/install.log'
+[1.379s] Invoked command in '/home/alex/Greenwall/Greenwall-Pruning/src/cdpr_control_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PS1=(env) \[\e]0;\u@\h: \w\a\]${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ PYTHONPATH=/home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Greenwall/Greenwall-Pruning/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} VIRTUAL_ENV_PROMPT=(env) /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/cdpr_control_pkg build --build-base /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/build install --record /home/alex/Greenwall/Greenwall-Pruning/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data
