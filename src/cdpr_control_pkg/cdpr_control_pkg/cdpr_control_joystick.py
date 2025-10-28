@@ -4,7 +4,7 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
-from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_ADDRESS
+from libs.DynamixelSync import DynamixelSync, CONTROL_ADDRESS
 
 
 class CDPRControlNode(Node):
@@ -60,29 +60,36 @@ class CDPRControlNode(Node):
         #     throttle_duration_sec=0.1
         # )
         
-        desired_velocity = None
-        Kp_motor = 0.0001
+        desired_velocity = np.zeros(4)
+        Kp_motor = 5
 
         current_cable_lengths = self.get_current_cable_lengths()
 
         for i in range(4):
-            length_errors = desired_cable_lengths[i] - current_cable_lengths[i]
-            self.get_logger().info(f"Length error motor {i+1}: {length_errors:.4f}")
-            desired_velocity[i] = Kp_motor * length_errors
-            self.get_logger().info(f"Desired velocity motor {i+1}: {desired_velocity[i]:.4f}")
+            length_error = desired_cable_lengths[i] - current_cable_lengths[i]
+            desired_velocity[i] = Kp_motor * length_error
 
+        velocity_int_list = [int(v) for v in desired_velocity]
+
+        self.get_logger().info(
+            f"Desired Velocities: ["
+            f"{velocity_int_list[0]:.4f}, {velocity_int_list[1]:.4f}, "
+            f"{velocity_int_list[2]:.4f}, {velocity_int_list[3]:.4f}]",
+            throttle_duration_sec=0.2
+        )
+        self.motors.enable_torque(motors=[1,2,3,4])
         self.motors.write(
             motors=[1,2,3,4],
             control_type=CONTROL_ADDRESS.GOAL_VELOCITY,
-            values=desired_velocity
+            values=velocity_int_list
         )
 
     def get_current_cable_lengths(self):
-        motor_encoder_positions = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_ADDRESS.PRESENT_POSITION) - self.zero_offsets
+        positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_ADDRESS.PRESENT_POSITION)
+        motor_encoder_positions = np.array(positions_list) - self.zero_offsets
         motor_encoder_rotations = motor_encoder_positions / 4096
         current_cable_lengths = motor_encoder_rotations * self.get_spool_circumference()
         return current_cable_lengths
-
     def get_spool_circumference(self):
         return self.spool_circumference
 
@@ -110,7 +117,7 @@ class CDPRControlNode(Node):
         l3 = p + R @ q3 - b3
         l4 = p + R @ q4 - b4
 
-        return l1, l2, l3, l4
+        return np.array([l1, l2, l3, l4])
         
 
 def main(args=None):
