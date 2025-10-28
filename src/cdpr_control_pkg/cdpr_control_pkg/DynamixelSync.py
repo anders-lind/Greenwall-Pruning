@@ -16,6 +16,10 @@ class DynamixelSync:
         self.port_handler.openPort()
         self.port_handler.setBaudRate(baudrate=buad_rate)
 
+    
+    def __del__(self):
+        self.disable_torque(motors=[1,2,3,4])
+
 
     def write(self, motors: list[int], values: list, control_type: CONTROL_ADDRESS) -> None:
         group_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, control_type.value[0], control_type.value[1])
@@ -85,12 +89,12 @@ if __name__  == "__main__":
     motors = [2]
     
     dmx.enable_torque(motors)
-    dmx.disable_torque(motors)
+    # dmx.disable_torque(motors)
     dmx.write(motors, [-10], CONTROL_ADDRESS.GOAL_VELOCITY)
 
+    # for i in range(1000):
     values = dmx.read(motors, CONTROL_ADDRESS.PRESENT_POSITION)
     print(values)
-    print(type(values[0]))
     
 
 

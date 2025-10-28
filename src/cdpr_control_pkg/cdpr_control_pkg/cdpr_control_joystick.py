@@ -4,7 +4,7 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
-from libs.DynamixelSync import DynamixelSync, CONTROL_ADDRESS
+from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_ADDRESS
 
 
 class CDPRControlNode(Node):
