@@ -15,9 +15,17 @@ class DynamixelSync:
         self.packet_handler = dxl.PacketHandler(protocol_version=protocol_version)
         self.port_handler.openPort()
         self.port_handler.setBaudRate(baudrate=buad_rate)
+    
+
+    def __del__(self):
+        self.disable_torque([1,2,3,4])
 
 
     def write(self, motors: list[int], values: list, control_type: CONTROL_ADDRESS) -> None:
+        if len(values) != len(motors):
+            print("ERROR: Values list not same length as motors list.")
+            raise ValueError
+        
         group_sync_write = dxl.GroupSyncWrite(self.port_handler, self.packet_handler, control_type.value[0], control_type.value[1])
         
         for i in range(len(motors)):
@@ -47,7 +55,6 @@ class DynamixelSync:
             values.append(value)
 
         return values
-
 
 
     def enable_torque(self, motors) -> None:
@@ -82,17 +89,11 @@ class DynamixelSync:
 
 if __name__  == "__main__":
     dmx = DynamixelSync()
-    motors = [2]
+    motors = [1, 2, 3, 4]
     
-    dmx.enable_torque(motors)
-    dmx.disable_torque(motors)
-    dmx.write(motors, [-10], CONTROL_ADDRESS.GOAL_VELOCITY)
+    # dmx.enable_torque(motors)
+    # dmx.write(motors, [-10, -1 ], CONTROL_ADDRESS.GOAL_VELOCITY)
 
+    # for i in range(1000):
     values = dmx.read(motors, CONTROL_ADDRESS.PRESENT_POSITION)
     print(values)
-    print(type(values[0]))
-    
-
-
-    # test read
-    # test disable torque

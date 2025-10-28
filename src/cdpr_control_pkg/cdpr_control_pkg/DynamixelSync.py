@@ -1,4 +1,4 @@
-from dynamixel_sdk import *
+from dynamixel_sdk import PortHandler, PacketHandler, GroupSyncWrite, GroupSyncRead
 from enum import Enum
 
 class CONTROL_ADDRESS(Enum):

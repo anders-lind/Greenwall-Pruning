@@ -1,0 +1,3 @@
+[submodule "src/cdpr_control_pkg/cdpr_control_pkg/DynamixelSDK"]
+	path = src/cdpr_control_pkg/cdpr_control_pkg/DynamixelSDK
+	url = https://github.com/ROBOTIS-GIT/DynamixelSDK

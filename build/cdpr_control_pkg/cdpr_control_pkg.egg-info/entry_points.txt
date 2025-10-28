@@ -1,2 +1,0 @@
-[console_scripts]
-cdpr_control_joystick = cdpr_control_pkg.cdpr_control_joystick:main
