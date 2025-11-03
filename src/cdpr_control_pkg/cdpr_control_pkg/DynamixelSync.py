@@ -3,11 +3,13 @@ from enum import Enum
 
 class CONTROL_ADDRESS(Enum):
     # NAME = (ADDRESS, LEN)
+    OPERATING_MODE = (11, 1)
     TORQUE_ENABLE = (64, 1)
     LED = (65, 1)
+    GOAL_CURRENT = (102, 2)
     GOAL_VELOCITY = (104, 4)
+    PRESENT_CURRENT = (126, 2)
     PRESENT_POSITION = (132, 4)
-
 
 class DynamixelSync:
     def __init__(self, port_name: str = "/dev/ttyUSB0", buad_rate: int = 115200, protocol_version: float = 2.0) -> None:
