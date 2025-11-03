@@ -23,18 +23,25 @@ class CDPRControlNode(Node):
         # CDPR parameters
         self.spool_circumference = 0.021*np.pi
         self.loop_period = 0.02  # 50 Hz
-        self.cable_tension = 10 # 0.229 mA
- 
-        # Control parameters
-        self.Kp_motor = 1000
-        self.Ki_motor = 1
-        self.Kd_motor = 10
-        self.integral_clamp = 50.0
+        self.desired_cable_tension = 25 # 2.69 mA
+
+
+        # Position controller parameters
+        self.pos_Kp = 1000
+        self.pos_Ki = 1
+        self.pos_Kd = 10
+        self.pos_integral_clamp = 50.0
+        self.pos_previous_error = np.array([0.0, 0.0, 0.0, 0.0])
+        self.pos_integral_error = np.array([0.0, 0.0, 0.0, 0.0])
         self.joystick_sensitivity = 0.001
 
-        # PID position controller state variables
-        self.last_length_errors = np.array([0.0, 0.0, 0.0, 0.0])
-        self.integral_error = np.array([0.0, 0.0, 0.0, 0.0])
+        # Tension controller parameters
+        self.tension_Kp = 0.8
+        self.tension_Ki = 0.5
+        self.tension_Kd = 0.1
+        self.tension_integral_clamp = 50.0
+        self.tension_previous_error = np.array([0.0, 0.0, 0.0, 0.0])
+        self.tension_integral_error = np.array([0.0, 0.0, 0.0, 0.0])
 
         # Motor initialization
         self.motors = DynamixelSync()
@@ -68,37 +75,50 @@ class CDPRControlNode(Node):
         # for i in range(len(self.pos)):
         #     self.pos[i] += joystick_sensitivity * self.input[i]
 
+        # Position controller:
         self.pos += self.joystick_sensitivity * self.input
 
         cable_vectors = self.inverse_kinematics(self.pos[0:2], self.pos[2])
         desired_cable_lengths = np.array([np.linalg.norm(l) for l in cable_vectors])
         current_cable_lengths = self.get_current_cable_lengths()
-
         # Propertional 
-        length_errors = desired_cable_lengths - current_cable_lengths
-
+        pos_error = desired_cable_lengths - current_cable_lengths
         # Integral with antiwindup
-        self.integral_error += length_errors * self.loop_period
-        self.integral_error = np.clip(
-            self.integral_error, -self.integral_clamp, self.integral_clamp
+        self.pos_integral_error += pos_error * self.loop_period
+        self.pos_integral_error = np.clip(
+            self.pos_integral_error, -self.pos_integral_clamp, self.pos_integral_clamp
         )
-
         # Derivative
-        derivative_error = (length_errors - self.last_length_errors) / self.loop_period
-        self.last_length_errors = length_errors
-
-        # PID position controller
-        control_current = self.Kp_motor*length_errors + self.Ki_motor*self.integral_error + self.Kd_motor*derivative_error
+        pos_derivative_error = (pos_error - self.pos_previous_error) / self.loop_period
+        self.pos_previous_error = pos_error
+        # Position PID output:
+        pos_control_current = self.pos_Kp*pos_error + self.pos_Ki*self.pos_integral_error + self.pos_Kd*pos_derivative_error
  
-        desired_current = self.cable_tension + control_current
+
+        # Tension controller 
+        current_cable_tensions = self.get_current_tension()
+        # Propertional 
+        tension_error = self.desired_cable_tension - current_cable_tensions
+        # Integral with antiwindup
+        self.tension_integral_error += tension_error * self.loop_period
+        self.tension_integral_error = np.clip(
+            self.tension_integral_error, -self.tension_integral_clamp, self.tension_integral_clamp
+        )
+        # Derivative
+        tension_derivative_error = (tension_error - self.tension_previous_error) / self.loop_period
+        self.tension_previous_error = tension_error
+        # Tension PID output:
+        tension_control_current = self.tension_Kp*tension_error + self.tension_Ki*self.tension_integral_error + self.tension_Kd*tension_derivative_error
+
+        desired_current = tension_control_current# + pos_control_current
         desired_current_int_list = [int(v) for v in desired_current]
 
-        self.get_logger().info(
-            f"Pos: [{self.pos[0]:.3f}, {self.pos[1]:.3f}, {self.pos[2]:.3f}], "
-            f"Lengths: [{desired_cable_lengths[0]:.3f}, {desired_cable_lengths[1]:.3f}, "
-            f"{desired_cable_lengths[2]:.3f}, {desired_cable_lengths[3]:.3f}]",
-            throttle_duration_sec=0.1
-        )
+        # self.get_logger().info(
+        #     f"Pos: [{self.pos[0]:.3f}, {self.pos[1]:.3f}, {self.pos[2]:.3f}], "
+        #     f"Lengths: [{desired_cable_lengths[0]:.3f}, {desired_cable_lengths[1]:.3f}, "
+        #     f"{desired_cable_lengths[2]:.3f}, {desired_cable_lengths[3]:.3f}]",
+        #     throttle_duration_sec=0.1
+        # )
 
         # self.get_logger().info(
         #     f"Current cable lengths: ["
@@ -128,6 +148,13 @@ class CDPRControlNode(Node):
         #     #throttle_duration_sec=0.2
         # )
 
+        self.get_logger().info(
+            f"Current cable tensions: ["
+            f"{current_cable_tensions[0]:.3f}, {current_cable_tensions[1]:.3f}, "
+            f"{current_cable_tensions[2]:.3f}, {current_cable_tensions[3]:.3f}]",
+            throttle_duration_sec=0.1
+        )
+
         self.motors.write(
             motors=[1,2,3,4],
             control_type=CONTROL_TABLE.GOAL_CURRENT,
@@ -140,6 +167,10 @@ class CDPRControlNode(Node):
         motor_encoder_rotations = motor_encoder_positions / 4096
         current_cable_lengths = self.initial_cable_lengths + motor_encoder_rotations * self.get_spool_circumference()
         return current_cable_lengths
+    
+    def get_current_tension(self):
+        currents_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT)
+        return np.array(currents_list)
 
     def get_spool_circumference(self):
         return self.spool_circumference
