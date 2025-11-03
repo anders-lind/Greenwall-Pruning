@@ -24,12 +24,13 @@ class CDPRControlNode(Node):
         self.spool_circumference = 0.021*np.pi
         self.loop_period = 0.02  # 50 Hz
         self.cable_tension = 10 # 0.229 mA
-
+ 
         # Control parameters
         self.Kp_motor = 1000
         self.Ki_motor = 1
         self.Kd_motor = 10
         self.integral_clamp = 50.0
+        self.joystick_sensitivity = 0.001
 
         # PID position controller state variables
         self.last_length_errors = np.array([0.0, 0.0, 0.0, 0.0])
@@ -60,13 +61,15 @@ class CDPRControlNode(Node):
         x = -msg.axes[3]
         y = -msg.axes[4]
         theta = msg.axes[2]-msg.axes[5]
-        self.input = [x,y,theta]
+        self.input = np.array([x,y,theta])
         
     def command_robot(self):
-        joystick_sensitivity = 0.001
-        for i in range(len(self.pos)):
-            self.pos[i] += joystick_sensitivity * self.input[i]
-        
+        # joystick_sensitivity = 0.001
+        # for i in range(len(self.pos)):
+        #     self.pos[i] += joystick_sensitivity * self.input[i]
+
+        self.pos += self.joystick_sensitivity * self.input
+
         cable_vectors = self.inverse_kinematics(self.pos[0:2], self.pos[2])
         desired_cable_lengths = np.array([np.linalg.norm(l) for l in cable_vectors])
         current_cable_lengths = self.get_current_cable_lengths()
@@ -90,12 +93,12 @@ class CDPRControlNode(Node):
         desired_current = self.cable_tension + control_current
         desired_current_int_list = [int(v) for v in desired_current]
 
-        # self.get_logger().info(
-        #     f"Pos: [{self.pos[0]:.3f}, {self.pos[1]:.3f}, {self.pos[2]:.3f}], "
-        #     f"Lengths: [{desired_cable_lengths[0]:.3f}, {desired_cable_lengths[1]:.3f}, "
-        #     f"{desired_cable_lengths[2]:.3f}, {desired_cable_lengths[3]:.3f}]",
-        #     throttle_duration_sec=0.1
-        # )
+        self.get_logger().info(
+            f"Pos: [{self.pos[0]:.3f}, {self.pos[1]:.3f}, {self.pos[2]:.3f}], "
+            f"Lengths: [{desired_cable_lengths[0]:.3f}, {desired_cable_lengths[1]:.3f}, "
+            f"{desired_cable_lengths[2]:.3f}, {desired_cable_lengths[3]:.3f}]",
+            throttle_duration_sec=0.1
+        )
 
         # self.get_logger().info(
         #     f"Current cable lengths: ["
@@ -104,12 +107,12 @@ class CDPRControlNode(Node):
         #     #throttle_duration_sec=0.2
         # )
 
-        self.get_logger().info(
-            f"Length errors: ["
-            f"{length_errors[0]:.4f}, {length_errors[1]:.4f}, "
-            f"{length_errors[2]:.4f}, {length_errors[3]:.4f}]",
-            #throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"Length errors: ["
+        #     f"{length_errors[0]:.4f}, {length_errors[1]:.4f}, "
+        #     f"{length_errors[2]:.4f}, {length_errors[3]:.4f}]",
+        #     #throttle_duration_sec=0.2
+        # )
         # self.get_logger().info(
         #     f"Desired currents: ["
         #     f"{desired_current[0]:.4f}, {desired_current[1]:.4f}, "
