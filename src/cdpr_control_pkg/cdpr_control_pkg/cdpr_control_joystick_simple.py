@@ -4,7 +4,7 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
-from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_ADDRESS
+from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 
 
 class CDPRControlNode(Node):
@@ -28,8 +28,8 @@ class CDPRControlNode(Node):
 
         # Motor initialization
         self.motors = DynamixelSync()
-        self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_ADDRESS.PRESENT_POSITION)
-        self.motors.write(motors=[1,2,3,4], values=[0,0,0,0], control_type=CONTROL_ADDRESS.OPERATING_MODE)
+        self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        self.motors.write(motors=[1,2,3,4], values=[0,0,0,0], control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
         
         self.joy_subscriber = self.create_subscription(
@@ -97,12 +97,12 @@ class CDPRControlNode(Node):
 
         self.motors.write(
             motors=[1,2,3,4],
-            control_type=CONTROL_ADDRESS.GOAL_CURRENT,
+            control_type=CONTROL_TABLE.GOAL_CURRENT,
             values=desired_current_int_list
         )
 
     def get_current_cable_lengths(self):
-        positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_ADDRESS.PRESENT_POSITION)
+        positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
         motor_encoder_positions = np.array(positions_list) - self.zero_offsets
         motor_encoder_rotations = motor_encoder_positions / 4096
         current_cable_lengths = self.initial_cable_lengths + motor_encoder_rotations * self.get_spool_circumference()
