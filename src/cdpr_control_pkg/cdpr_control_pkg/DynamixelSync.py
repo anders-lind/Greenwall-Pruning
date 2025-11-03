@@ -37,6 +37,7 @@ class DynamixelSync:
 
     
     def __del__(self):
+        print("Dynamixel destructor")
         self.disable_torque(motors=[1,2,3,4])
 
 
