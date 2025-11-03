@@ -3,10 +3,21 @@ from enum import Enum
 
 class CONTROL_ADDRESS(Enum):
     # NAME = (ADDRESS, LEN)
+    OPERATING_MODE = (11, 1)
     TORQUE_ENABLE = (64, 1)
     LED = (65, 1)
+    GOAL_CURRENT = (102, 2)
     GOAL_VELOCITY = (104, 4)
     PRESENT_POSITION = (132, 4)
+
+
+class OPERATING_MODES(Enum):
+    CURRENT_CONTROL_MODE = 0
+    VELOCITY_CONTROL_MODE = 1
+    POSITION_CONTROL_MODE = 3
+    EXTENDED_POSITION_CONTROL_MODE = 4
+    CURRENT_BASSED_POSITION_CONTROL_MODE = 5
+    PWN_CONTROL_MODE = 16
 
 
 class DynamixelSync:
@@ -21,12 +32,18 @@ class DynamixelSync:
         self.disable_torque(motors=[1,2,3,4])
 
 
-    def write(self, motors: list[int], values: list, control_type: CONTROL_ADDRESS) -> None:
+    def write(self, motors: list[int], values: list|int, control_type: CONTROL_ADDRESS) -> None:
         group_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, control_type.value[0], control_type.value[1])
         
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
-            param = (values[i]).to_bytes(control_type.value[1], 'little', signed=True)
+            param = None
+            if type(values) == int:
+                print("int")
+                param = (values).to_bytes(control_type.value[1], 'little', signed=True)
+            elif type(values) == list:
+                print("list")
+                param = (values[i]).to_bytes(control_type.value[1], 'little', signed=True)
             group_sync_write.addParam(motor_id, param)
         
         group_sync_write.txPacket()
