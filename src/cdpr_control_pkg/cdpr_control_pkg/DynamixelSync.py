@@ -40,10 +40,15 @@ class DynamixelSync:
             param = None
             if type(values) == int:
                 print("int")
-                param = (values).to_bytes(control_type.value[1], 'little', signed=True)
+                try:
+                    param = (values).to_bytes(control_type.value[1], 'little', signed=True)
+                except:
+                    print("ERROR: (values, control_type.value[1])", values, ",", control_type.value[1])
             elif type(values) == list:
-                print("list")
-                param = (values[i]).to_bytes(control_type.value[1], 'little', signed=True)
+                try:
+                    param = (values[i]).to_bytes(control_type.value[1], 'little', signed=True)
+                except:
+                    print("ERROR: (values[i], control_type.value[1])", values[i], ",", control_type.value[1])
             group_sync_write.addParam(motor_id, param)
         
         group_sync_write.txPacket()
