@@ -8,6 +8,7 @@ class CONTROL_ADDRESS(Enum):
     LED = (65, 1)
     GOAL_CURRENT = (102, 2)
     GOAL_VELOCITY = (104, 4)
+    PRESENT_CURRENT = (126, 2)
     PRESENT_POSITION = (132, 4)
 
 
