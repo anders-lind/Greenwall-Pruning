@@ -9,7 +9,7 @@ from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 
 class CDPRControlNode(Node):
     def __init__(self):
-        super().__init__('cdpr_control_joystick_simple')
+        super().__init__('cdpr_control_joystick_FK')
 
         # Node state variables
         self.last_buttons_state = None
@@ -20,7 +20,7 @@ class CDPRControlNode(Node):
         self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
 
         # CDPR state variables
-        self.input = np.array([0.0, 0.0, 0.0]) # x, y, theta
+        self.input = np.array([0.0, 0.0, 0.0]) # F_x, F_y, tau_z
         self.pos = self.initial_pos
 
         # CDPR parameters
@@ -29,7 +29,7 @@ class CDPRControlNode(Node):
         self.desired_cable_tension = 25 # 2.69 mA
 
         self.q1 = np.array([-0.0425, -0.02])
-        self.q2 = np.array([-0.0425, 0.02])  
+        self.q2 = np.array([-0.0425, 0.02])
         self.q3 = np.array([0.0425, 0.02])
         self.q4 = np.array([0.0425, -0.02])
 
@@ -38,22 +38,8 @@ class CDPRControlNode(Node):
         self.B3 = np.array([0.975, 1.0175])
         self.B4 = np.array([0.975, 0])
 
-        # Position controller parameters
-        self.pos_Kp = 1000
-        self.pos_Ki = 1
-        self.pos_Kd = 10
-        self.pos_integral_clamp = 50.0
-        self.pos_previous_error = np.array([0.0, 0.0, 0.0, 0.0])
-        self.pos_integral_error = np.array([0.0, 0.0, 0.0, 0.0])
-        self.joystick_sensitivity = 0.001
-
-        # Tension controller parameters
-        self.tension_Kp = 1.0
-        self.tension_Ki = 0.5
-        self.tension_Kd = 0.0
-        self.tension_integral_clamp = 50.0
-        self.tension_previous_error = np.array([0.0, 0.0, 0.0, 0.0])
-        self.tension_integral_error = np.array([0.0, 0.0, 0.0, 0.0])
+        # Controller parameters
+        self.joystick_sensitivity = np.array([1, 1, 0.1]) # Force and torque sensitivity vector
 
         # Motor initialization
         self.motors = DynamixelSync()
@@ -74,7 +60,7 @@ class CDPRControlNode(Node):
             self.command_robot
         )
 
-        self.get_logger().info("CDPR Control Joystick Node has been started.")
+        self.get_logger().info("CDPR Control Joystick Node with FK has been started.")
     
     def joy_callback(self, msg: Joy):
         self.handle_button_events(msg.buttons)
@@ -87,88 +73,20 @@ class CDPRControlNode(Node):
         
     def command_robot(self):
         # Position controller:
-        self.pos += self.joystick_sensitivity * self.input
+        u = self.joystick_sensitivity * self.input
 
-        cable_vectors = self.inverse_kinematics(self.pos[0:2], self.pos[2])
-        desired_cable_lengths = np.array([np.linalg.norm(l) for l in cable_vectors])
-        current_cable_lengths = self.get_current_cable_lengths()
-        # Propertional 
-        pos_error = desired_cable_lengths - current_cable_lengths
-        # Integral with antiwindup
-        self.pos_integral_error += pos_error * self.loop_period
-        self.pos_integral_error = np.clip(
-            self.pos_integral_error, -self.pos_integral_clamp, self.pos_integral_clamp
-        )
-        # Derivative
-        pos_derivative_error = (pos_error - self.pos_previous_error) / self.loop_period
-        self.pos_previous_error = pos_error
-        # Position PID output:
-        pos_control_current = self.pos_Kp*pos_error + self.pos_Ki*self.pos_integral_error + self.pos_Kd*pos_derivative_error
- 
+        pos = self.pos[0:2]
+        theta = self.pos[2]
+        cable_vectors = self.inverse_kinematics(pos, theta)
+        S = self.compute_structure_matrix(cable_vectors, theta)
+        T = np.linalg.pinv(S) @ u
+    
+        desired_currents = self.force_to_current(T)
 
-        # Tension controller 
-        current_cable_tensions = self.get_current_tension()
-        # Propertional 
-        tension_error = self.desired_cable_tension - current_cable_tensions
-        # Integral with antiwindup
-        self.tension_integral_error += tension_error * self.loop_period
-        self.tension_integral_error = np.clip(
-            self.tension_integral_error, -self.tension_integral_clamp, self.tension_integral_clamp
-        )
-        # Derivative
-        tension_derivative_error = (tension_error - self.tension_previous_error) / self.loop_period
-        self.tension_previous_error = tension_error
-        # Tension PID output:
-        tension_control_current = self.tension_Kp*tension_error + self.tension_Ki*self.tension_integral_error + self.tension_Kd*tension_derivative_error
-
-        desired_current = tension_control_current + pos_control_current
-        desired_current_int_list = [int(v) for v in desired_current]
-
-        # self.get_logger().info(
-        #     f"Pos: [{self.pos[0]:.3f}, {self.pos[1]:.3f}, {self.pos[2]:.3f}], "
-        #     f"Lengths: [{desired_cable_lengths[0]:.3f}, {desired_cable_lengths[1]:.3f}, "
-        #     f"{desired_cable_lengths[2]:.3f}, {desired_cable_lengths[3]:.3f}]",
-        #     throttle_duration_sec=0.1
-        # )
-
-        # self.get_logger().info(
-        #     f"Current cable lengths: ["
-        #     f"{current_cable_lengths[0]:.4f}, {current_cable_lengths[1]:.4f}, "
-        #     f"{current_cable_lengths[2]:.4f}, {current_cable_lengths[3]:.4f}]",
-        #     #throttle_duration_sec=0.2
-        # )
-
-        # self.get_logger().info(
-        #     f"Length errors: ["
-        #     f"{length_errors[0]:.4f}, {length_errors[1]:.4f}, "
-        #     f"{length_errors[2]:.4f}, {length_errors[3]:.4f}]",
-        #     #throttle_duration_sec=0.2
-        # )
-        # self.get_logger().info(
-        #     f"Desired currents: ["
-        #     f"{desired_current[0]:.4f}, {desired_current[1]:.4f}, "
-        #     f"{desired_current[2]:.4f}, {desired_current[3]:.4f}]",
-        #     throttle_duration_sec=0.2
-        # )
-
-        # Command motors
-        # self.get_logger().info(
-        #     f"Desired currents int list: ["
-        #     f"{desired_current_int_list[0]}, {desired_current_int_list[1]}, "
-        #     f"{desired_current_int_list[2]}, {desired_current_int_list[3]}]",
-        #     #throttle_duration_sec=0.2
-        # )
-
-        self.get_logger().info(
-            f"Current cable tensions: ["
-            f"{current_cable_tensions[0]:.3f}, {current_cable_tensions[1]:.3f}, "
-            f"{current_cable_tensions[2]:.3f}, {current_cable_tensions[3]:.3f}]",
-            throttle_duration_sec=0.1
-        )
         self.motors.write(
             motors=[1,2,3,4],
             control_type=CONTROL_TABLE.GOAL_CURRENT,
-            values=desired_current_int_list
+            values=desired_currents
         )
 
     def get_current_cable_lengths(self):
@@ -188,7 +106,6 @@ class CDPRControlNode(Node):
     def inverse_kinematics(self, position, orientation):
         p = np.array(position)
         theta = orientation
-
         R = np.array([
             [np.cos(theta), -np.sin(theta)],
             [-np.sin(theta), np.cos(theta)]
@@ -201,6 +118,28 @@ class CDPRControlNode(Node):
 
         return np.array([l1, l2, l3, l4])
     
+    def compute_structure_matrix(self, cable_vectors, theta):
+        S = np.zeros((3,4))
+        R = np.array([
+            [np.cos(theta), -np.sin(theta)],
+            [-np.sin(theta), np.cos(theta)]
+        ])
+        Rq = np.array([R @ self.q1, R @ self.q2, R @ self.q3, R @ self.q4]).T
+        
+        for i in range(4):
+            l = cable_vectors[i]
+            print("l: ",l)
+            l_norm = np.linalg.norm(l)
+            u = - l / l_norm
+            S[0,i] = u[0]
+            S[1,i] = u[1]
+            S[2,i] = Rq[0,i]*u[1] - Rq[1,i]*u[0]
+
+        return S
+    
+    def force_to_current(self, force_vector):
+        return [int(v*2.69) for v in force_vector]  # 2.69 mA per 1N
+
     def handle_button_events(self, current_buttons):
         # Initialize button state
         if self.last_buttons_state is None:
