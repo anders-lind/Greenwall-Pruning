@@ -9,7 +9,7 @@ from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 
 class CDPRControlNode(Node):
     def __init__(self):
-        super().__init__('cdpr_control_joystick')
+        super().__init__('cdpr_control_joystick_speed_control')
 
         self.input = np.array([0.0, 0.0, 0.0]) # x, y, theta
         # Eventuel refactor her til noget med initial pos
