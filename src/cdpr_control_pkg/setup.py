@@ -25,7 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'cdpr_control_joystick_speed_control = cdpr_control_pkg.cdpr_control_joystick_speed_control:main',
-            'cdpr_control_joystick_simple = cdpr_control_pkg.cdpr_control_joystick_simple:main'
+            'cdpr_control_joystick_simple = cdpr_control_pkg.cdpr_control_joystick_simple:main',
+            'cdpr_control_joystick_FK = cdpr_control_pkg.cdpr_control_joystick_FK:main',
         ],
     },
 )

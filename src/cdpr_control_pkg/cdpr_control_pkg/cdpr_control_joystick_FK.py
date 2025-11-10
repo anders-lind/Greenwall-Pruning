@@ -5,6 +5,7 @@ import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
+import scipy
 
 
 class CDPRControlNode(Node):
@@ -14,19 +15,13 @@ class CDPRControlNode(Node):
         # Node state variables
         self.last_buttons_state = None
 
-        # CDPR initial state
-        self.initial_pos = np.array([0.4, 0.5, 0.0]) # x, y, theta
-        self.initial_cable_vectors = self.inverse_kinematics(self.initial_pos[0:2], self.initial_pos[2])
-        self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
-
-        # CDPR state variables
-        self.input = np.array([0.0, 0.0, 0.0]) # F_x, F_y, tau_z
-        self.pos = self.initial_pos
-
         # CDPR parameters
         self.spool_circumference = 0.021*np.pi
         self.loop_period = 0.02  # 50 Hz
         self.desired_cable_tension = 25 # 2.69 mA
+        
+        self.CDPR_height = 1.0175
+        self.CDPR_width = 0.975
 
         self.q1 = np.array([-0.0425, -0.02])
         self.q2 = np.array([-0.0425, 0.02])
@@ -34,12 +29,21 @@ class CDPRControlNode(Node):
         self.q4 = np.array([0.0425, -0.02])
 
         self.B1 = np.array([0, 0])
-        self.B2 = np.array([0, 1.0175])
-        self.B3 = np.array([0.975, 1.0175])
-        self.B4 = np.array([0.975, 0])
+        self.B2 = np.array([0, self.CDPR_height])
+        self.B3 = np.array([self.CDPR_width, self.CDPR_height])
+        self.B4 = np.array([self.CDPR_width, 0])
 
         # Controller parameters
         self.joystick_sensitivity = np.array([1, 1, 0.1]) # Force and torque sensitivity vector
+
+        # CDPR initial state
+        self.initial_pose = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0]) # x, y, theta
+        self.initial_cable_vectors = self.inverse_kinematics(self.initial_pose[0:2], self.initial_pose[2])
+        self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
+
+        # CDPR state variables
+        self.input = np.array([0.0, 0.0, 0.0]) # F_x, F_y, tau_z
+        self.pose = self.initial_pose
 
         # Motor initialization
         self.motors = DynamixelSync()
@@ -67,6 +71,10 @@ class CDPRControlNode(Node):
 
         x = -msg.axes[3]
         y = -msg.axes[4]
+        if abs(msg.axes[6]) > 0:
+            x = -msg.axes[6]
+        if abs(msg.axes[7]) > 0:
+            y = -msg.axes[7]
         theta = msg.axes[2]-msg.axes[5] 
         self.input = np.array([x,y,theta])
         
@@ -75,13 +83,35 @@ class CDPRControlNode(Node):
         # Position controller:
         u = self.joystick_sensitivity * self.input
 
-        pos = self.pos[0:2]
-        theta = self.pos[2]
-        cable_vectors = self.inverse_kinematics(pos, theta)
+        cable_lenghts = self.get_current_cable_lengths()
+        self.pose = self.forward_kinematics(cable_lenghts, self.pose[0:2],self.pose[2])
+
+        x = self.pose[0]
+        y = self.pose[1]
+        theta = self.pose[2]
+
+        Kp_x = 100
+        Kp_y = 100
+        Kp_z = 10
+
+        F_x = Kp_x * u[0]
+        F_y = Kp_y * u[1]
+        tau_z = Kp_z * u[2]
+
+        wrench = [F_x, F_y, tau_z]
+
+        print('u ' , wrench)
+
+        cable_vectors = self.inverse_kinematics([x,y], theta)
         S = self.compute_structure_matrix(cable_vectors, theta)
-        T = np.linalg.pinv(S) @ u
-    
+
+        #T = scipy.optimize.nnls(S, wrench)[0]
+
+        T = np.linalg.pinv(S) @ wrench 
+
+
         desired_currents = self.force_to_current(T)
+        print('desired currents ', desired_currents )
 
         self.motors.write(
             motors=[1,2,3,4],
@@ -118,6 +148,35 @@ class CDPRControlNode(Node):
 
         return np.array([l1, l2, l3, l4])
     
+    def forward_kinematics(self, cable_lenghts, p0, theta0):
+        q = [self.q1, self.q2, self.q3, self.q4]
+        B = [self.B1, self.B2, self.B3, self.B4]
+
+        def constraint_equations(input):
+            x = input[0]    
+            y = input[1]
+            theta = input[2]
+            l = cable_lenghts
+            z_rot = np.array([
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)]
+            ])
+            q_world = np.zeros((4,2))
+            d_sq = np.zeros(4)
+            d = np.zeros(4)
+            for i in range(4):
+                q_world[i] = (z_rot @ q[i] + [x, y])
+                d_sq[i] = (B[i][0] - q_world[i][0])**2 + (B[i][1] - q_world[i][1])**2
+                d[i] = np.sqrt(d_sq[i])
+            MSE = 0
+            for i in range(4):
+                MSE += (d[i]-l[i])**2
+            MSE = MSE/4
+            return MSE
+
+        result = scipy.optimize.minimize(constraint_equations, [p0[0], p0[1], theta0])
+        return result.x
+    
     def compute_structure_matrix(self, cable_vectors, theta):
         S = np.zeros((3,4))
         R = np.array([
@@ -128,7 +187,6 @@ class CDPRControlNode(Node):
         
         for i in range(4):
             l = cable_vectors[i]
-            print("l: ",l)
             l_norm = np.linalg.norm(l)
             u = - l / l_norm
             S[0,i] = u[0]
@@ -138,7 +196,7 @@ class CDPRControlNode(Node):
         return S
     
     def force_to_current(self, force_vector):
-        return [int(v*2.69) for v in force_vector]  # 2.69 mA per 1N
+        return [int(v*2.69+20) for v in force_vector]  # 2.69 mA per 1N
 
     def handle_button_events(self, current_buttons):
         # Initialize button state
@@ -166,7 +224,11 @@ class CDPRControlNode(Node):
 
         # Button Y
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
-            pass
+            new_center = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0])
+            self.pose = new_center
+            self.initial_cable_vectors = self.inverse_kinematics(new_center[0:2], new_center[2])
+            self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
+            self.get_logger().info('New home set')
 
         # Button LB
         if current_buttons[4] == 1 and self.last_buttons_state[4] == 0:
