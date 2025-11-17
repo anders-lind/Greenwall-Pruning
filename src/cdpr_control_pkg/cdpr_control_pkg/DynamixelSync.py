@@ -54,6 +54,14 @@ class DynamixelSync:
 
         group_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, address, data_length)
 
+        # If signed, adjust values based on motor direction
+        if is_signed:
+            if type(values) == int:
+                values = values * self.motorDirections[motors[0]]
+            elif type(values) == list:
+                for i in range(len(values)):
+                    values[i] = values[i] * self.motorDirections[motors[i]]
+
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
             param = None
@@ -84,7 +92,7 @@ class DynamixelSync:
         is_signed = control_type.value[2]
 
         group_sync_read = GroupSyncRead(self.port_handler, self.packet_handler, address, data_length)
-        values = [] 
+        values = []
 
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
@@ -108,6 +116,11 @@ class DynamixelSync:
                     value = value - (1 << bit_length)
 
             values.append(value)
+        
+        # If signed, adjust values based on motor direction
+        if is_signed:
+            for i in range(len(values)):
+                values[i] = values[i] * self.motorDirections[motors[i]]
 
         return values
 
