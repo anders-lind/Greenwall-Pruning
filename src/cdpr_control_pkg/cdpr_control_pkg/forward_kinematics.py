@@ -50,4 +50,6 @@ def forward_kinematics():
 
 
 if __name__ == "__main__":
-    forward_kinematics()
+    #forward_kinematics()
+    d = {1:1, 2:4, 4:9}
+    print(d[4])

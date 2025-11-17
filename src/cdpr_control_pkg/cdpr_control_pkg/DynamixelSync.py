@@ -34,11 +34,17 @@ class DynamixelSync:
         self.packet_handler = PacketHandler(protocol_version=protocol_version)
         self.port_handler.openPort()
         self.port_handler.setBaudRate(baudrate=buad_rate)
+        self.motorDirections = {1:1, 2:1, 3:1, 4:1}
 
     
     def __del__(self):
         print("Dynamixel destructor")
         self.disable_torque(motors=[1,2,3,4])
+    
+
+    def setTurningDirection(self, motors: list[int], directions: list[int]) -> None:
+        for i in range(len(motors)):
+            self.motorDirections[motors[i]] = directions[i]
 
 
     def write(self, motors: list[int], values: int|list[int]|OPERATING_MODES, control_type: CONTROL_TABLE) -> None:
