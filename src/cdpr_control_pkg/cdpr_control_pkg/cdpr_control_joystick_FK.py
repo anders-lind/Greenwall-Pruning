@@ -34,7 +34,13 @@ class CDPRControlNode(Node):
         self.B4 = np.array([self.CDPR_width, 0])
 
         # Controller parameters
-        self.joystick_sensitivity = np.array([1, 1, 0.1]) # Force and torque sensitivity vector
+        self.joystick_sensitivity = np.array([100, 100, 1]) # Force and torque sensitivity vector
+        self.tension_reference = 20/2.69
+        self.Kp_tension = 0.1
+        self.Ki_tension = 1
+        self.Kd_tension = 0
+        self.tension_integral = np.zeros(4)
+        self.tension_previous_error = np.zeros(4)
 
         # CDPR initial state
         self.initial_pose = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0]) # x, y, theta
@@ -80,7 +86,7 @@ class CDPRControlNode(Node):
         
         
     def command_robot(self):
-        # Position controller:
+        # Force distribution algorithm
         u = self.joystick_sensitivity * self.input
 
         cable_lenghts = self.get_current_cable_lengths()
@@ -90,27 +96,29 @@ class CDPRControlNode(Node):
         y = self.pose[1]
         theta = self.pose[2]
 
-        Kp_x = 100
-        Kp_y = 100
-        Kp_z = 10
-
-        F_x = Kp_x * u[0]
-        F_y = Kp_y * u[1]
-        tau_z = Kp_z * u[2]
-
-        wrench = [F_x, F_y, tau_z]
-
-        print('u ' , wrench)
-
         cable_vectors = self.inverse_kinematics([x,y], theta)
         S = self.compute_structure_matrix(cable_vectors, theta)
 
-        #T = scipy.optimize.nnls(S, wrench)[0]
+        T = scipy.optimize.nnls(S, u)[0]
 
-        T = np.linalg.pinv(S) @ wrench 
+        #T = np.linalg.pinv(S) @ u 
+
+        # Tension controller
+
+        present_currents = np.array(self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT))
+        tension_error = np.ones(4)*self.tension_reference-present_currents
+
+        self.tension_integral += tension_error * self.loop_period
+        max_integral = 100000
+        self.tension_integral = np.maximum(np.zeros(4),np.minimum(self.tension_integral,np.ones(4)*max_integral))
+
+        tension_error_derivative = (tension_error-self.tension_previous_error)/self.loop_period
+        self.tension_previous_error = tension_error
+
+        T_tension = self.Kp_tension * tension_error + self.Ki_tension * self.tension_integral + self.Kd_tension * tension_error_derivative
 
 
-        desired_currents = self.force_to_current(T)
+        desired_currents = self.force_to_current(T)#+T_tension)
         print('desired currents ', desired_currents )
 
         self.motors.write(
@@ -196,7 +204,7 @@ class CDPRControlNode(Node):
         return S
     
     def force_to_current(self, force_vector):
-        return [int(v*2.69+20) for v in force_vector]  # 2.69 mA per 1N
+        return [int(v*2.69) for v in force_vector]  # 2.69 mA per 1N
 
     def handle_button_events(self, current_buttons):
         # Initialize button state
