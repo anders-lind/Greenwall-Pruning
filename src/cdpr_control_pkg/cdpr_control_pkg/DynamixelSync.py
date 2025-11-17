@@ -34,11 +34,17 @@ class DynamixelSync:
         self.packet_handler = PacketHandler(protocol_version=protocol_version)
         self.port_handler.openPort()
         self.port_handler.setBaudRate(baudrate=buad_rate)
+        self.motorDirections = {1:1, 2:1, 3:1, 4:1}
 
     
     def __del__(self):
         print("Dynamixel destructor")
         self.disable_torque(motors=[1,2,3,4])
+    
+
+    def setTurningDirection(self, motors: list[int], directions: list[int]) -> None:
+        for i in range(len(motors)):
+            self.motorDirections[motors[i]] = directions[i]
 
 
     def write(self, motors: list[int], values: int|list[int]|OPERATING_MODES, control_type: CONTROL_TABLE) -> None:
@@ -47,6 +53,14 @@ class DynamixelSync:
         is_signed = control_type.value[2]
 
         group_sync_write = GroupSyncWrite(self.port_handler, self.packet_handler, address, data_length)
+
+        # If signed, adjust values based on motor direction
+        if is_signed:
+            if type(values) == int:
+                values = values * self.motorDirections[motors[0]]
+            elif type(values) == list:
+                for i in range(len(values)):
+                    values[i] = values[i] * self.motorDirections[motors[i]]
 
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
@@ -78,7 +92,7 @@ class DynamixelSync:
         is_signed = control_type.value[2]
 
         group_sync_read = GroupSyncRead(self.port_handler, self.packet_handler, address, data_length)
-        values = [] 
+        values = []
 
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
@@ -102,6 +116,11 @@ class DynamixelSync:
                     value = value - (1 << bit_length)
 
             values.append(value)
+        
+        # If signed, adjust values based on motor direction
+        if is_signed:
+            for i in range(len(values)):
+                values[i] = values[i] * self.motorDirections[motors[i]]
 
         return values
 

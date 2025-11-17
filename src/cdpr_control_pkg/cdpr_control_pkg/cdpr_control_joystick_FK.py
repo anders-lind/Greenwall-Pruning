@@ -53,6 +53,7 @@ class CDPRControlNode(Node):
 
         # Motor initialization
         self.motors = DynamixelSync()
+        self.motors.setTurningDirection(motors=[1,2,3,4], directions=[1,1,1,1])
         self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
         self.motors.write(motors=[1,2,3,4], values=0, control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
