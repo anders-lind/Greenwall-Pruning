@@ -16,12 +16,13 @@ class CDPRControlNode(Node):
         self.last_buttons_state = None
 
         # CDPR parameters
-        self.spool_circumference = 0.021*np.pi
+        self.spool_radius = 0.027
+        self.spool_circumference = 2 * self.spool_radius * np.pi
         self.loop_period = 0.02  # 50 Hz
         self.desired_cable_tension = 25 # 2.69 mA
         
-        self.CDPR_height = 1.0175
-        self.CDPR_width = 0.975
+        self.CDPR_height = 0.9600
+        self.CDPR_width = 0.9325
 
         self.q1 = np.array([-0.0425, -0.02])
         self.q2 = np.array([-0.0425, 0.02])
@@ -34,10 +35,10 @@ class CDPRControlNode(Node):
         self.B4 = np.array([self.CDPR_width, 0])
 
         # Controller parameters
-        self.joystick_sensitivity = np.array([100, 100, 1]) # Force and torque sensitivity vector
+        self.joystick_sensitivity = np.array([10, 10, 1]) # Force and torque sensitivity vector
         self.tension_reference = 20/2.69
-        self.Kp_tension = 0.1
-        self.Ki_tension = 1
+        self.Kp_tension = 0.2
+        self.Ki_tension = 0.5
         self.Kd_tension = 0
         self.tension_integral = np.zeros(4)
         self.tension_previous_error = np.zeros(4)
@@ -53,7 +54,7 @@ class CDPRControlNode(Node):
 
         # Motor initialization
         self.motors = DynamixelSync()
-        self.motors.setTurningDirection(motors=[1,2,3,4], directions=[1,1,1,1])
+        self.motors.setTurningDirection(motors=[1,2,3,4], directions=[-1,-1,-1,-1])
         self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
         self.motors.write(motors=[1,2,3,4], values=0, control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
@@ -100,7 +101,10 @@ class CDPRControlNode(Node):
         cable_vectors = self.inverse_kinematics([x,y], theta)
         S = self.compute_structure_matrix(cable_vectors, theta)
 
-        T = scipy.optimize.nnls(S, u)[0]
+        #T = scipy.optimize.nnls(S, u)[0]
+        T = scipy.optimize.lsq_linear(S, u, bounds=(10,100)).x
+        print("u: ", u)
+        print("T: ", T)
 
         #T = np.linalg.pinv(S) @ u 
 
@@ -118,14 +122,13 @@ class CDPRControlNode(Node):
 
         T_tension = self.Kp_tension * tension_error + self.Ki_tension * self.tension_integral + self.Kd_tension * tension_error_derivative
 
-
         desired_currents = self.force_to_current(T)#+T_tension)
-        print('desired currents ', desired_currents )
+        # print('desired currents ', desired_currents)
 
         self.motors.write(
             motors=[1,2,3,4],
             control_type=CONTROL_TABLE.GOAL_CURRENT,
-            values=desired_currents
+            values=self.current_to_motor_input(desired_currents)
         )
 
     def get_current_cable_lengths(self):
@@ -205,7 +208,13 @@ class CDPRControlNode(Node):
         return S
     
     def force_to_current(self, force_vector):
-        return [int(v*2.69) for v in force_vector]  # 2.69 mA per 1N
+        torque_vector = force_vector*self.spool_radius
+        current_vector = torque_vector * 2
+        return current_vector
+        #return [int(v/0.00269) for v in current_vector]  # 2.69 mA per 1N
+
+    def current_to_motor_input(self, current_vector):
+        return [int(v/0.00269) for v in current_vector]  # 2.69 mA per motor unit
 
     def handle_button_events(self, current_buttons):
         # Initialize button state
