@@ -6,6 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 import scipy
+import matplotlib.pyplot as plt
 
 
 class CDPRControlNode(Node):
@@ -18,9 +19,9 @@ class CDPRControlNode(Node):
         # CDPR parameters
         self.spool_radius = 0.027
         self.spool_circumference = 2 * self.spool_radius * np.pi
-        self.loop_period = 0.02  # 50 Hz
-        self.desired_cable_tension = 25 # 2.69 mA
         
+        self.desired_cable_tension = 25 # 2.69 mA
+
         self.CDPR_height = 0.9600
         self.CDPR_width = 0.9325
 
@@ -35,30 +36,31 @@ class CDPRControlNode(Node):
         self.B4 = np.array([self.CDPR_width, 0])
 
         # Controller parameters
-        self.joystick_sensitivity = np.array([10, 10, 1]) # Force and torque sensitivity vector
+        self.joystick_sensitivity = np.array([100, 100, 0.1]) # Force and torque sensitivity vector
         self.tension_reference = 20/2.69
-        self.Kp_tension = 0.2
-        self.Ki_tension = 0.5
+        self.Kp_tension = 0.05
+        self.Ki_tension = 0.1
         self.Kd_tension = 0
         self.tension_integral = np.zeros(4)
         self.tension_previous_error = np.zeros(4)
+        self.control_loop_period = 0.005  # 200 Hz
 
-        # CDPR initial state
-        self.initial_pose = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0]) # x, y, theta
-        self.initial_cable_vectors = self.inverse_kinematics(self.initial_pose[0:2], self.initial_pose[2])
-        self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
-
+        self.motor_feedback_period = 0.005
+        self.filter_alpha = 0.4
+        
         # CDPR state variables
         self.input = np.array([0.0, 0.0, 0.0]) # F_x, F_y, tau_z
-        self.pose = self.initial_pose
+        self.initial_pose = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0]) # x, y, theta
 
         # Motor initialization
         self.motors = DynamixelSync()
         self.motors.setTurningDirection(motors=[1,2,3,4], directions=[-1,-1,-1,-1])
-        self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
         self.motors.write(motors=[1,2,3,4], values=0, control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
         
+        # CDPR initial state
+        self.initialize_state()
+
         # Subscriber
         self.joy_subscriber = self.create_subscription(
             Joy,
@@ -68,11 +70,28 @@ class CDPRControlNode(Node):
         )
         # Main control loop timer
         self.control_timer = self.create_timer(
-            self.loop_period,
+            self.control_loop_period,
             self.command_robot
         )
 
+        self.motor_feedback_timer = self.create_timer(
+            self.motor_feedback_period,
+            self.motor_feedback
+        )
+        self.init_visualisation()
+        self.visualisation = self.create_timer(
+            0.1,
+            self.visualisation
+        )
+
         self.get_logger().info("CDPR Control Joystick Node with FK has been started.")
+
+    def initialize_state(self):
+        self.initial_cable_vectors = self.inverse_kinematics(self.initial_pose[0:2], self.initial_pose[2])
+        self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
+        self.cable_lengths = np.array(self.initial_cable_lengths)
+        self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        self.pose = self.initial_pose
     
     def joy_callback(self, msg: Joy):
         self.handle_button_events(msg.buttons)
@@ -91,8 +110,7 @@ class CDPRControlNode(Node):
         # Force distribution algorithm
         u = self.joystick_sensitivity * self.input
 
-        cable_lenghts = self.get_current_cable_lengths()
-        self.pose = self.forward_kinematics(cable_lenghts, self.pose[0:2],self.pose[2])
+        self.pose = self.forward_kinematics(self.cable_lengths, self.pose[0:2],self.pose[2])
 
         x = self.pose[0]
         y = self.pose[1]
@@ -102,34 +120,149 @@ class CDPRControlNode(Node):
         S = self.compute_structure_matrix(cable_vectors, theta)
 
         #T = scipy.optimize.nnls(S, u)[0]
-        T = scipy.optimize.lsq_linear(S, u, bounds=(10,100)).x
-        print("u: ", u)
-        print("T: ", T)
+        #T = scipy.optimize.lsq_linear(S, u, bounds=(10,100)).x
 
-        #T = np.linalg.pinv(S) @ u 
+        T_move = np.linalg.pinv(S) @ u
+        S_nullspace = scipy.linalg.null_space(S)
+
+        # Flatten ensures it is a 1D vector (4,) not (4,1)
+        S_nullspace = S_nullspace.flatten() 
+
+        # Force positive direction (Assuming geometry is now fixed)
+        if np.sum(S_nullspace) < 0:
+            S_nullspace = -S_nullspace
+            
+        S_nullspace = S_nullspace / np.linalg.norm(S_nullspace)
+
+        # Now this check should pass
+        if np.any(S_nullspace < -1e-5): # Use tolerance for float errors
+            print("WARNING: Mixed signs...")
+        
+        t_min = 1   
+        lambda_vec = (t_min - T_move) / S_nullspace
+        lambda_optimal = np.max(lambda_vec)
+
+        T_tension = lambda_optimal*S_nullspace.flatten()
+
+        T_total = T_move + T_tension
+        desired_currents = self.force_to_current(T_total)
 
         # Tension controller
 
-        present_currents = np.array(self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT))
-        tension_error = np.ones(4)*self.tension_reference-present_currents
+        # present_currents = np.array(self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT))
+        # tension_error = np.ones(4)*self.tension_reference-present_currents
 
-        self.tension_integral += tension_error * self.loop_period
-        max_integral = 100000
-        self.tension_integral = np.maximum(np.zeros(4),np.minimum(self.tension_integral,np.ones(4)*max_integral))
+        # self.tension_integral += tension_error * self.control_loop_period
+        # max_integral = 100000
+        # self.tension_integral = np.maximum(np.zeros(4),np.minimum(self.tension_integral,np.ones(4)*max_integral))
 
-        tension_error_derivative = (tension_error-self.tension_previous_error)/self.loop_period
-        self.tension_previous_error = tension_error
+        # tension_error_derivative = (tension_error-self.tension_previous_error)/self.control_loop_period
+        # self.tension_previous_error = tension_error
 
-        T_tension = self.Kp_tension * tension_error + self.Ki_tension * self.tension_integral + self.Kd_tension * tension_error_derivative
+        # T_tension = self.Kp_tension * tension_error + self.Ki_tension * self.tension_integral + self.Kd_tension * tension_error_derivative
 
-        desired_currents = self.force_to_current(T)#+T_tension)
-        # print('desired currents ', desired_currents)
+        # print("u: ", u)
+        #print("T: ", T)
+        #print("T+T_tension", T+T_tension)
+
+        # desired_currents = self.force_to_current(T)#+T_tension)
+        #print('desired currents ', desired_currents)
 
         self.motors.write(
             motors=[1,2,3,4],
             control_type=CONTROL_TABLE.GOAL_CURRENT,
             values=self.current_to_motor_input(desired_currents)
         )
+
+    def motor_feedback(self):   
+        raw_lengths = self.get_current_cable_lengths()
+        # 2. Apply Exponential Moving Average (Low Pass Filter)
+        # New = (Alpha * Raw) + ((1 - Alpha) * Old)
+        self.cable_lengths = (
+            self.filter_alpha * raw_lengths + 
+            (1.0 - self.filter_alpha) * self.cable_lengths
+        )
+        self.cable_lengths = self.cable_lengths
+
+    def init_visualisation(self):
+        """Initializes the Matplotlib figure and line objects once."""
+        plt.ion() # Turn on interactive mode
+        self.fig, self.ax = plt.subplots()
+        
+        # Set workspace limits (with some padding)
+        margin = 0.2
+        self.ax.set_xlim(-margin, self.CDPR_width + margin)
+        self.ax.set_ylim(-margin, self.CDPR_height + margin)
+        self.ax.set_aspect('equal')
+        self.ax.grid(True)
+        self.ax.set_title("CDPR Real-Time State")
+
+        # 1. Plot the Fixed Frame (B1 -> B2 -> B3 -> B4 -> B1)
+        # Note: B points are your anchors (BL, TL, TR, BR)
+        frame_x = [self.B1[0], self.B2[0], self.B3[0], self.B4[0], self.B1[0]]
+        frame_y = [self.B1[1], self.B2[1], self.B3[1], self.B4[1], self.B1[1]]
+        self.ax.plot(frame_x, frame_y, 'k--', linewidth=2, label='Frame')
+        
+        # 2. Initialize the End-Effector Line (Empty for now)
+        # We use 'b-' (blue line) for the box and 'ro' (red dot) for center
+        self.ee_line, = self.ax.plot([], [], 'b-', linewidth=2, label='End Effector')
+        self.center_dot, = self.ax.plot([], [], 'ro')
+        
+        # 3. Initialize the 4 Cable Lines (Empty for now)
+        # Storing them in a list to update later
+        self.cable_lines = []
+        colors = ['g', 'g', 'g', 'g'] # Green cables
+        for i in range(4):
+            line, = self.ax.plot([], [], color=colors[i], linewidth=1)
+            self.cable_lines.append(line)
+
+        plt.legend(loc='upper right')
+
+    def visualisation(self):
+        # 1. Unpack current pose
+        x, y, theta = self.pose
+
+        # 2. Create Rotation Matrix (The CORRECT one you fixed)
+        R = np.array([
+            [np.cos(theta), -np.sin(theta)],
+            [np.sin(theta),  np.cos(theta)]
+        ])
+
+        # 3. Calculate World Coordinates of EE Corners
+        # q vectors are local coordinates relative to center
+        # We need to rotate them and add the center position (x,y)
+        qs = [self.q1, self.q2, self.q3, self.q4]
+        corners_world = []
+        
+        for q_local in qs:
+            q_rotated = R @ q_local
+            corner_world = np.array([x, y]) + q_rotated
+            corners_world.append(corner_world)
+
+        # 4. Update End-Effector Box Plot
+        # Append the first corner at the end to close the square
+        ee_x = [c[0] for c in corners_world] + [corners_world[0][0]]
+        ee_y = [c[1] for c in corners_world] + [corners_world[0][1]]
+        
+        self.ee_line.set_data(ee_x, ee_y)
+        self.center_dot.set_data([x], [y])
+
+        # 5. Update Cable Plots
+        # Cable i connects Anchor Bi to Corner i
+        Bs = [self.B1, self.B2, self.B3, self.B4]
+        
+        for i in range(4):
+            anchor = Bs[i]
+            body_pt = corners_world[i]
+            
+            # X coordinates: [Anchor_x, Body_x]
+            # Y coordinates: [Anchor_y, Body_y]
+            self.cable_lines[i].set_data([anchor[0], body_pt[0]], [anchor[1], body_pt[1]])
+
+        # 6. Render
+        # This draws the updates without blocking execution
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
 
     def get_current_cable_lengths(self):
         positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
@@ -150,7 +283,7 @@ class CDPRControlNode(Node):
         theta = orientation
         R = np.array([
             [np.cos(theta), -np.sin(theta)],
-            [-np.sin(theta), np.cos(theta)]
+            [np.sin(theta), np.cos(theta)]
         ])
 
         l1 = p + R @ self.q1 - self.B1
@@ -193,7 +326,7 @@ class CDPRControlNode(Node):
         S = np.zeros((3,4))
         R = np.array([
             [np.cos(theta), -np.sin(theta)],
-            [-np.sin(theta), np.cos(theta)]
+            [np.sin(theta), np.cos(theta)]
         ])
         Rq = np.array([R @ self.q1, R @ self.q2, R @ self.q3, R @ self.q4]).T
         
@@ -203,18 +336,22 @@ class CDPRControlNode(Node):
             u = - l / l_norm
             S[0,i] = u[0]
             S[1,i] = u[1]
-            S[2,i] = Rq[0,i]*u[1] - Rq[1,i]*u[0]
+            S[2,i] = (Rq[0,i]*u[1] - Rq[1,i]*u[0])
 
+        print("Structure matrix\n", S)
         return S
     
     def force_to_current(self, force_vector):
         torque_vector = force_vector*self.spool_radius
-        current_vector = torque_vector * 2
+        current_vector = torque_vector * 0.625
         return current_vector
         #return [int(v/0.00269) for v in current_vector]  # 2.69 mA per 1N
 
     def current_to_motor_input(self, current_vector):
-        return [int(v/0.00269) for v in current_vector]  # 2.69 mA per motor unit
+        # raw_values = current_vector / 0.00269
+        # clamped_values = np.clip(raw_values, -2047, 2047)
+        # return clamped_values.astype(int)
+        return [int(max(-2047, min(2047, v/0.00269))) for v in current_vector]
 
     def handle_button_events(self, current_buttons):
         # Initialize button state
@@ -242,10 +379,12 @@ class CDPRControlNode(Node):
 
         # Button Y
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
-            new_center = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0])
-            self.pose = new_center
-            self.initial_cable_vectors = self.inverse_kinematics(new_center[0:2], new_center[2])
-            self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
+            # new_center = np.array([self.CDPR_width/2, self.CDPR_height/2, 0.0])
+            # self.pose = new_center
+            # self.initial_cable_vectors = self.inverse_kinematics(new_center[0:2], new_center[2])
+            # self.initial_cable_lengths = [np.linalg.norm(l) for l in self.initial_cable_vectors]
+            # self.cable_lengths = self.get_current_cable_lengths()
+            self.initialize_state()
             self.get_logger().info('New home set')
 
         # Button LB
