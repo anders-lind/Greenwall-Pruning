@@ -1,0 +1,55 @@
+[0.821s] Invoking command in '/home/alex/Thesis/Greenwall-Pruning/src/cdpr_control_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/cdpr_control_pkg build --build-base /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build install --record /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data
+[1.105s] running egg_info
+[1.105s] creating ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info
+[1.128s] writing ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/PKG-INFO
+[1.128s] writing dependency_links to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/dependency_links.txt
+[1.128s] writing entry points to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/entry_points.txt
+[1.129s] writing requirements to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/requires.txt
+[1.129s] writing top-level names to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/top_level.txt
+[1.129s] writing manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.173s] reading manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.174s] writing manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.174s] running build
+[1.174s] running build_py
+[1.174s] creating /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build
+[1.174s] creating /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib
+[1.174s] creating /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/__init__.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/cdpr_control_joystick_FK.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/cdpr_control_joystick_speed_control.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/forward_kinematics.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/cdpr_control_joystick_FK2.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/DynamixelSync.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] copying cdpr_control_pkg/cdpr_control_joystick_simple.py -> /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg
+[1.175s] running install
+[1.181s] running install_lib
+[1.203s] creating /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.203s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/__init__.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.203s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/cdpr_control_joystick_FK.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.203s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/cdpr_control_joystick_speed_control.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.204s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/forward_kinematics.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.204s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/cdpr_control_joystick_FK2.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.204s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/DynamixelSync.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.204s] copying /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build/lib/cdpr_control_pkg/cdpr_control_joystick_simple.py -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg
+[1.204s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/__init__.py to __init__.cpython-312.pyc
+[1.205s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/cdpr_control_joystick_FK.py to cdpr_control_joystick_FK.cpython-312.pyc
+[1.208s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/cdpr_control_joystick_speed_control.py to cdpr_control_joystick_speed_control.cpython-312.pyc
+[1.209s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/forward_kinematics.py to forward_kinematics.cpython-312.pyc
+[1.210s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/cdpr_control_joystick_FK2.py to cdpr_control_joystick_FK2.cpython-312.pyc
+[1.212s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/DynamixelSync.py to DynamixelSync.cpython-312.pyc
+[1.214s] byte-compiling /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg/cdpr_control_joystick_simple.py to cdpr_control_joystick_simple.cpython-312.pyc
+[1.215s] running install_data
+[1.215s] creating /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/share/ament_index
+[1.215s] creating /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/share/ament_index/resource_index
+[1.216s] creating /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/share/ament_index/resource_index/packages
+[1.216s] copying resource/cdpr_control_pkg -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/share/ament_index/resource_index/packages
+[1.216s] copying package.xml -> /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/share/cdpr_control_pkg
+[1.216s] running install_egg_info
+[1.239s] Copying ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info
+[1.239s] running install_scripts
+[1.380s] Installing cdpr_control_joystick_FK script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.380s] Installing cdpr_control_joystick_FK2 script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.380s] Installing cdpr_control_joystick_simple script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.380s] Installing cdpr_control_joystick_speed_control script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.380s] writing list of installed files to '/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log'
+[1.403s] Invoked command in '/home/alex/Thesis/Greenwall-Pruning/src/cdpr_control_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/cdpr_control_pkg build --build-base /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build install --record /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data

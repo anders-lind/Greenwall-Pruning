@@ -1,0 +1,24 @@
+[0.810s] Invoking command in '/home/alex/Thesis/Greenwall-Pruning/src/cdpr_control_pkg': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/cdpr_control_pkg build --build-base /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build install --record /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data
+[1.088s] running egg_info
+[1.107s] writing ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/PKG-INFO
+[1.108s] writing dependency_links to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/dependency_links.txt
+[1.108s] writing entry points to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/entry_points.txt
+[1.108s] writing requirements to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/requires.txt
+[1.108s] writing top-level names to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/top_level.txt
+[1.146s] reading manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.147s] writing manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+[1.147s] running build
+[1.147s] running build_py
+[1.147s] running install
+[1.152s] running install_lib
+[1.172s] running install_data
+[1.172s] running install_egg_info
+[1.191s] removing '/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info' (and everything under it)
+[1.191s] Copying ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info
+[1.192s] running install_scripts
+[1.311s] Installing cdpr_control_joystick_FK script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.311s] Installing cdpr_control_joystick_FK2 script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.311s] Installing cdpr_control_joystick_simple script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.311s] Installing cdpr_control_joystick_speed_control script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+[1.311s] writing list of installed files to '/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log'
+[1.333s] Invoked command in '/home/alex/Thesis/Greenwall-Pruning/src/cdpr_control_pkg' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../build/cdpr_control_pkg build --build-base /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/build install --record /home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log --single-version-externally-managed install_data

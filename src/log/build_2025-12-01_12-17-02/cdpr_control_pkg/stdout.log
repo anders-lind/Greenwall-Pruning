@@ -1,0 +1,22 @@
+running egg_info
+writing ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/PKG-INFO
+writing dependency_links to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/dependency_links.txt
+writing entry points to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/entry_points.txt
+writing requirements to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/requires.txt
+writing top-level names to ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/top_level.txt
+reading manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+writing manifest file '../build/cdpr_control_pkg/cdpr_control_pkg.egg-info/SOURCES.txt'
+running build
+running build_py
+running install
+running install_lib
+running install_data
+running install_egg_info
+removing '/home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info' (and everything under it)
+Copying ../build/cdpr_control_pkg/cdpr_control_pkg.egg-info to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/python3.12/site-packages/cdpr_control_pkg-0.0.0-py3.12.egg-info
+running install_scripts
+Installing cdpr_control_joystick_FK script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+Installing cdpr_control_joystick_FK2 script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+Installing cdpr_control_joystick_simple script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+Installing cdpr_control_joystick_speed_control script to /home/alex/Thesis/Greenwall-Pruning/src/install/cdpr_control_pkg/lib/cdpr_control_pkg
+writing list of installed files to '/home/alex/Thesis/Greenwall-Pruning/src/build/cdpr_control_pkg/install.log'

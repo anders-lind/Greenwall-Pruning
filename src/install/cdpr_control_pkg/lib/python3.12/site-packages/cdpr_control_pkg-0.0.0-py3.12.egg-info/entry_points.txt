@@ -1,0 +1,5 @@
+[console_scripts]
+cdpr_control_joystick_FK = cdpr_control_pkg.cdpr_control_joystick_FK:main
+cdpr_control_joystick_FK2 = cdpr_control_pkg.cdpr_control_joystick_FK2:main
+cdpr_control_joystick_simple = cdpr_control_pkg.cdpr_control_joystick_simple:main
+cdpr_control_joystick_speed_control = cdpr_control_pkg.cdpr_control_joystick_speed_control:main

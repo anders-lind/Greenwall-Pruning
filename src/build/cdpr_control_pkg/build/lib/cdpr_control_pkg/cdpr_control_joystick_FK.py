@@ -36,7 +36,7 @@ class CDPRControlNode(Node):
         self.B4 = np.array([self.CDPR_width, 0])
 
         # Controller parameters
-        self.joystick_sensitivity = np.array([100, 100, 0.1]) # Force and torque sensitivity vector
+        self.joystick_sensitivity = np.array([20, 20, 0.1]) # Force and torque sensitivity vector
         self.tension_reference = 20/2.69
         self.Kp_tension = 0.05
         self.Ki_tension = 0.1
