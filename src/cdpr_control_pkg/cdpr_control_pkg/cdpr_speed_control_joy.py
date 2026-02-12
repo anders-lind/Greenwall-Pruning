@@ -10,7 +10,7 @@ from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 
 class CDPRControlNode(Node):
     def __init__(self):
-        super().__init__('cdpr_speed_control')
+        super().__init__('cdpr_speed_control_joy')
 
         # Node state variables
         self.last_buttons_state = None
@@ -41,10 +41,6 @@ class CDPRControlNode(Node):
         self.home_tension = 25 # Newton
         self.movement_speed = 0.01 # m/s
         self.rotation_speed = 0.1 # rad/s
-        self.stopping_radius_pos = 1e-6
-        self.slowdown_radius_pos = 0.01
-        self.stopping_radius_rot = 1e-6
-        self.slowdown_radius_rot = 0.01
 
         self.control_loop_period = 0.02  # 50 Hz
 
@@ -55,7 +51,7 @@ class CDPRControlNode(Node):
         # State variables
         self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.initial_pose = np.array([self.CDPR_width/2, 0.52-0.03, 0.0]) # (x, y, theta)
-        self.pose = self.initial_pose.copy()
+        self.pose = self.initial_pose
 
         # Motor initialization
         self.motors = DynamixelSync()
@@ -81,7 +77,7 @@ class CDPRControlNode(Node):
 
     def initialize_state(self):
         # Assume robot starts at center or user manually centered it
-        self.pose = self.initial_pose.copy()
+        self.pose = self.initial_pose
         
         # Calculate theoretical lengths for the center
         self.initial_cable_vectors = self.inverse_kinematics(self.initial_pose[0:2], self.initial_pose[2])
@@ -106,45 +102,52 @@ class CDPRControlNode(Node):
         self.input = np.array([x,y,theta])
         
     def command_robot(self):
+        # Controller mode
+        delta_pos_unscaled = self.input[0:2]
+        delta_ori = self.input[2]
 
-        # Get goal pose
-        goal_pose = self.initial_pose + np.array([0.02, 0.02, 0])
-
-        # Goal relative to current pos and ori
-        delta_pos = goal_pose[0:2] - self.pose[0:2]
-        delta_ori = goal_pose[2] - self.pose[2]
-
-        # Scale delta pos
-        delta_pos_norm = np.linalg.norm(delta_pos)
-        if delta_pos_norm < self.stopping_radius_pos:
-            delta_pos_scaled = np.array([0.0, 0.0])
-        elif delta_pos_norm < self.stopping_radius_pos:
-            delta_pos_scaled = delta_pos / self.slowdown_radius_pos
+        delta_pos_norm = np.linalg.norm(delta_pos_unscaled)
+        if delta_pos_norm < 1e-6:
+            delta_pos = np.array([0.0, 0.0])
+        elif delta_pos_norm < 0.01:
+            delta_pos = delta_pos_unscaled
         else:
-            delta_pos_scaled = delta_pos / delta_pos_norm
+            delta_pos = delta_pos_unscaled/delta_pos_norm
+
         
-        # Scale delta ori
-        delta_ori_norm = np.linalg.norm(delta_ori)
-        if delta_pos_norm < self.stopping_radius_rot:
-            delta_ori_scaled = np.array([0.0, 0.0])
-        elif delta_pos_norm < self.slowdown_radius_rot:
-            delta_ori_scaled = delta_ori / self.slowdown_radius_rot
-        else:
-            delta_ori_scaled = delta_ori / delta_ori_norm
+        self.get_logger().info(
+            f"delta_pos_unscaled: ["
+            f"{delta_pos_unscaled[0]:.4f}, {delta_pos_unscaled[1]:.4f}]",
+            throttle_duration_sec=0.2
+        )
+
+        self.get_logger().info(
+            f"delta_pos_norm: ["
+            f"{delta_pos_norm}]",
+            throttle_duration_sec=0.2
+        )
+
+        
+
+        
 
         # Pose estimation with integration
-        self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
-        self.pose[2:3] = self.pose[2:3] + delta_ori_scaled * self.rotation_speed * self.control_loop_period
+        self.pose[0:2] = self.pose[0:2] + delta_pos * self.movement_speed * self.control_loop_period
+        self.pose[2:3] = self.pose[2:3] + delta_ori * self.rotation_speed * self.control_loop_period
 
-        # Clamp pose
+        # Clamping pose
         margin = 0.05 # m
         self.pose[0] = np.clip(self.pose[0], margin, self.CDPR_width - margin)
         self.pose[1] = np.clip(self.pose[1], margin, self.CDPR_height - margin)
         self.pose[2] = np.clip(self.pose[2], -0.3, 0.3) 
 
+        # Pose estimation with forward kinematics
+        #self.pose = self.forward_kinematics(self.cable_lengths, self.pose[0:2], self.pose[2])
+
         desired_cable_vectors = self.inverse_kinematics(self.pose[0:2], self.pose[2])
         desired_cable_lengths = [np.linalg.norm(l) for l in desired_cable_vectors]
 
+        # cable_errors = desired_cable_lengths - self.cable_lengths # meters
         cable_errors = np.array(desired_cable_lengths) - self.previous_cable_lengths # meters
 
         desired_cable_velocities = -(cable_errors / self.control_loop_period)
@@ -154,7 +157,11 @@ class CDPRControlNode(Node):
 
         velocity_int_list = [int(v) for v in desired_motor_units]
 
-        # Prints
+        self.get_logger().info(
+            f"ref_direction: ["
+            f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}]",
+            throttle_duration_sec=0.2
+        )
         self.get_logger().info(
             f"self.pose: ["
             f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
@@ -162,8 +169,27 @@ class CDPRControlNode(Node):
             throttle_duration_sec=0.2
         )
         self.get_logger().info(
-            f"delta_pose: ["
-            f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}, {delta_ori:.4f}]",
+            f"self.cable_lengths: ["
+            f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, "
+            f"{self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
+            throttle_duration_sec=0.2
+        )
+        self.get_logger().info(
+            f"desired_cable_lengths: ["
+            f"{desired_cable_lengths[0]:.4f}, {desired_cable_lengths[1]:.4f}, "
+            f"{desired_cable_lengths[2]:.4f}, {desired_cable_lengths[3]:.4f}]",
+            throttle_duration_sec=0.2
+        )
+        self.get_logger().info(
+            f"desired_velocity_linear: ["
+            f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, "
+            f"{desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
+            throttle_duration_sec=0.2
+        )
+        self.get_logger().info(
+            f"velocity_int_list: ["
+            f"{velocity_int_list[0]:.4f}, {velocity_int_list[1]:.4f}, "
+            f"{velocity_int_list[2]:.4f}, {velocity_int_list[3]:.4f}]",
             throttle_duration_sec=0.2
         )
         self.get_logger().info(
@@ -171,7 +197,7 @@ class CDPRControlNode(Node):
             throttle_duration_sec=0.2
         )
         
-        # Write to motors
+
         self.motors.enable_torque(motors=[1,2,3,4])
         self.motors.write(
             motors=[1,2,3,4],
@@ -179,10 +205,6 @@ class CDPRControlNode(Node):
             values=velocity_int_list
         )
 
-        # Publish pose
-        # TODO
-        
-        # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
 
     def background_tasks(self):

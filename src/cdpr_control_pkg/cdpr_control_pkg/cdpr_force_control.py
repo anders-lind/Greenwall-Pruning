@@ -134,7 +134,7 @@ class CDPRControlNode(Node):
         self.pose = np.array([clamped_x, clamped_y, clamped_th])
 
         # 2. Calculate velocity
-        velocity = (self.pose - self.previous_pose) / self.control_loop_period
+        velocity = (self.previous_pose - self.pose) / self.control_loop_period
         self.previous_pose = self.pose
 
         # 3. Calculate Damping Force
