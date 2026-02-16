@@ -6,7 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 import scipy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
-from plantwall_custom_interfaces.msg import CdprState
+from plantwall_custom_interfaces.msg import CdprPose
 
 
 class CDPRControlNode(Node):
@@ -67,7 +67,7 @@ class CDPRControlNode(Node):
         self.initialize_state()
 
         # ROS Infrastructure
-        self.state_publisher = self.create_publisher(CdprState, '/cdpr_state', 10)
+        self.current_pose_publisher = self.create_publisher(CdprPose, '/cdpr/current_pos', 10)
 
         self.joy_subscriber = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
         
@@ -105,7 +105,7 @@ class CDPRControlNode(Node):
         self.input = np.array([x,y,theta])
         
     def command_robot(self):
-        state_msg = CdprState()
+        current_pose_msg = CdprPose()
 
         # Controller mode
         delta_pos_unscaled = self.input[0:2]
@@ -205,12 +205,12 @@ class CDPRControlNode(Node):
             control_type=CONTROL_TABLE.GOAL_VELOCITY,
             values=velocity_int_list
         )
+        
+        current_pose_msg.position = self.pose[0:2].tolist()
+        current_pose_msg.orientation = self.pose[2]
+        self.current_pose_publisher.publish(current_pose_msg)
 
         self.previous_cable_lengths = desired_cable_lengths
-        
-        state_msg.position = self.pose[0:2].tolist()
-        state_msg.orientation = self.pose[2]
-        self.state_publisher.publish(state_msg)
 
     def background_tasks(self):
         # Homing procedure

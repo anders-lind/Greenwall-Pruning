@@ -6,6 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 import scipy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
+from plantwall_custom_interfaces.msg import CdprPose
 
 
 class CDPRControlNode(Node):
@@ -37,14 +38,12 @@ class CDPRControlNode(Node):
         self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
 
         # CONTROLLER GAINS
-        # self.joystick_sensitivity = np.array([1, 1, 1]) # Reference point offset (x, y, theta) [m, m, rad]
         self.home_tension = 25 # Newton
         self.movement_speed = 0.01 # m/s
         self.rotation_speed = 0.1 # rad/s
         self.stopping_radius_pos = 1e-6
         self.slowdown_radius_pos = 0.01
-        self.stopping_radius_rot = 1e-6
-        self.slowdown_radius_rot = 0.01
+        self.stopping_rot = 1e-6
 
         self.control_loop_period = 0.02  # 50 Hz
 
@@ -56,6 +55,7 @@ class CDPRControlNode(Node):
         self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.initial_pose = np.array([self.CDPR_width/2, 0.52-0.03, 0.0]) # (x, y, theta)
         self.pose = self.initial_pose.copy()
+        self.target_pose = self.initial_pose # (x, y, theta)
 
         # Motor initialization
         self.motors = DynamixelSync()
@@ -70,7 +70,10 @@ class CDPRControlNode(Node):
         self.initialize_state()
 
         # ROS Infrastructure
+        self.current_pose_publisher = self.create_publisher(CdprPose, '/cdpr/current_pose', 10)
+
         self.joy_subscriber = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
+        self.goto_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/goto_pose', self.goto_pose_callback, 10)
         
         self.control_timer = self.create_timer(self.control_loop_period, self.command_robot)
         self.control_timer.cancel()
@@ -104,11 +107,17 @@ class CDPRControlNode(Node):
         if abs(msg.axes[7]) > 0: y = msg.axes[7]
         theta = (msg.axes[5] - msg.axes[2]) / 2 
         self.input = np.array([x,y,theta])
+
+    def goto_pose_callback(self, msg: Joy):
+        target_pos = msg.position
+        target_ori = msg.orientation
+        self.target_pose = np.array([target_pos[0], target_pos[1], target_ori])
         
     def command_robot(self):
+        current_pose_msg = CdprPose()
 
         # Get goal pose
-        goal_pose = self.initial_pose + np.array([0.02, 0.02, 0])
+        goal_pose = self.target_pose
 
         # Goal relative to current pos and ori
         delta_pos = goal_pose[0:2] - self.pose[0:2]
@@ -124,17 +133,12 @@ class CDPRControlNode(Node):
             delta_pos_scaled = delta_pos / delta_pos_norm
         
         # Scale delta ori
-        delta_ori_norm = np.linalg.norm(delta_ori)
-        if delta_pos_norm < self.stopping_radius_rot:
-            delta_ori_scaled = np.array([0.0, 0.0])
-        elif delta_pos_norm < self.slowdown_radius_rot:
-            delta_ori_scaled = delta_ori / self.slowdown_radius_rot
-        else:
-            delta_ori_scaled = delta_ori / delta_ori_norm
+        if abs(delta_ori) < self.stopping_rot:
+            delta_ori = 0.0
 
         # Pose estimation with integration
         self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
-        self.pose[2:3] = self.pose[2:3] + delta_ori_scaled * self.rotation_speed * self.control_loop_period
+        self.pose[2] = self.pose[2] + delta_ori * self.rotation_speed * self.control_loop_period
 
         # Clamp pose
         margin = 0.05 # m
@@ -180,7 +184,9 @@ class CDPRControlNode(Node):
         )
 
         # Publish pose
-        # TODO
+        current_pose_msg.position = self.pose[0:2].tolist()
+        current_pose_msg.orientation = self.pose[2]
+        self.current_pose_publisher.publish(current_pose_msg)
         
         # Update old variables
         self.previous_cable_lengths = desired_cable_lengths

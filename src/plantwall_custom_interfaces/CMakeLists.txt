@@ -11,7 +11,7 @@ find_package(rosidl_default_generators REQUIRED)
 
 # Generate the interface
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/CdprState.msg"
+  "msg/CdprPose.msg"
 )
 
 if(BUILD_TESTING)
