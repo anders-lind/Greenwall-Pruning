@@ -62,7 +62,7 @@ class CDPRControlNode(Node):
         self.motors.setTurningDirection(motors=[1,2,3,4], directions=[-1,-1,1,1])
         # self.motors.setTurningDirection(motors=[1,2,3,4], directions=[1,1,-1,-1])
         self.motors.disable_torque(motors=[1,2,3,4])
-        self.motors.write(motors=[1,2,3,4], values=128, control_type=CONTROL_TABLE.VELOCITY_LIMIT)
+        # self.motors.write(motors=[1,2,3,4], values=128, control_type=CONTROL_TABLE.VELOCITY_LIMIT)
         self.motors.write(motors=[1,2,3,4], values=1, control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
         

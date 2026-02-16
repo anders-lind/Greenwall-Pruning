@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'dynamixel_sdk', 'rclpy'],
+    install_requires=['setuptools', 'dynamixel_sdk', 'rclpy', 'plantwall_custom_interfaces'],
     zip_safe=True,
     maintainer='alex',
     maintainer_email='alexellegaard@gmail.com',
