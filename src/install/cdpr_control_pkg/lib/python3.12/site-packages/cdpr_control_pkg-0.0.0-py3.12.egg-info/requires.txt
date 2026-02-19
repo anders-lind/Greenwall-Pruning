@@ -1,6 +1,0 @@
-dynamixel_sdk
-rclpy
-setuptools
-
-[test]
-pytest

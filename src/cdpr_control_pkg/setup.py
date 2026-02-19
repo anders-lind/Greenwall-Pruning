@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
     ],
-    install_requires=['setuptools', 'dynamixel_sdk', 'rclpy'],
+    install_requires=['setuptools', 'dynamixel_sdk', 'rclpy', 'plantwall_custom_interfaces'],
     zip_safe=True,
     maintainer='alex',
     maintainer_email='alexellegaard@gmail.com',
@@ -28,7 +28,8 @@ setup(
             'cdpr_speed_control_joy = cdpr_control_pkg.cdpr_speed_control_joy:main',
             'cdpr_position_and_tension_control = cdpr_control_pkg.cdpr_position_and_tension_control:main',
             'cdpr_force_control = cdpr_control_pkg.cdpr_force_control:main',
-            'cdpr_manual_homing = cdpr_control_pkg.cdpr_manual_homing:main'
+            'cdpr_manual_homing = cdpr_control_pkg.cdpr_manual_homing:main',
+            'cdpr_pathplanner = cdpr_control_pkg.cdpr_pathplanner:main'
         ],
     },
 )
