@@ -10,6 +10,7 @@ class CONTROL_TABLE(Enum):
     MAX_VOLTAGE_LIMIT = (32, 2, False)
     MIN_VOLTAGE_LIMIT = (34, 2, False)
     CURRENT_LIMIT = (38, 2, False)
+    VELOCITY_LIMIT = (44, 4, False)
     TORQUE_ENABLE = (64, 1, False)
     LED = (65, 1, False)
     GOAL_CURRENT = (102, 2, True)
