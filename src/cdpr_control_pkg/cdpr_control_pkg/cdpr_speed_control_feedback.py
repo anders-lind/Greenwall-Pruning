@@ -121,6 +121,14 @@ class CDPRControlNode(Node):
         # Get goal pose
         goal_pose = self.target_pose.copy()
 
+        self.pose = self.forward_kinematics(self.cable_lengths, self.pose[0:2], self.pose[2]).copy()
+
+        # # Clamp pose
+        # margin = 0.05 # m
+        # self.pose[0] = np.clip(self.pose[0], margin, self.CDPR_width - margin)
+        # self.pose[1] = np.clip(self.pose[1], margin, self.CDPR_height - margin)
+        # self.pose[2] = np.clip(self.pose[2], -0.3, 0.3) 
+
         # Goal relative to current pos and ori
         delta_pos = goal_pose[0:2] - self.pose[0:2]
         delta_ori = goal_pose[2] - self.pose[2]
@@ -139,25 +147,38 @@ class CDPRControlNode(Node):
             delta_ori = 0.0
 
         # Pose estimation with integration
-        self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
-        self.pose[2] = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
+        # self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
+        # self.pose[2] = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
 
-        # Clamp pose
-        margin = 0.05 # m
-        self.pose[0] = np.clip(self.pose[0], margin, self.CDPR_width - margin)
-        self.pose[1] = np.clip(self.pose[1], margin, self.CDPR_height - margin)
-        self.pose[2] = np.clip(self.pose[2], -0.3, 0.3) 
+        # 1. Feedforward: Where we are vs. Where we want to be next
+        # Calculate ideal cable lengths for CURRENT pose
+        current_ideal_vectors = self.inverse_kinematics(self.pose[0:2], self.pose[2])
+        current_ideal_lengths = np.array([np.linalg.norm(l) for l in current_ideal_vectors])
 
-        desired_cable_vectors = self.inverse_kinematics(self.pose[0:2], self.pose[2])
-        desired_cable_lengths = [np.linalg.norm(l) for l in desired_cable_vectors]
+        # Calculate ideal cable lengths for NEXT pose
+        next_pos = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
+        next_ori = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
+        
+        desired_cable_vectors = self.inverse_kinematics(next_pos, next_ori)
+        desired_cable_lengths = np.array([np.linalg.norm(l) for l in desired_cable_vectors])
 
-        cable_errors = np.array(desired_cable_lengths) - self.previous_cable_lengths # meters
+        # Feedforward Velocity (The speed required just to execute the movement)
+        ff_velocities = -(desired_cable_lengths - current_ideal_lengths) / self.control_loop_period
 
-        desired_cable_velocities = -(cable_errors / self.control_loop_period)
-        desired_spool_rpm = (desired_cable_velocities / self.spool_circumference) * 60 # convert to RPM
+        # 2. Feedback: Correcting sensor error
+        # Compare where the cables SHOULD be right now vs. where the encoders say they ARE
+        cable_errors = current_ideal_lengths - self.cable_lengths 
+        
+        # Proportional Gain (Tune this! Start small. 2.0 means it corrects errors over ~0.5 seconds)
+        Kp_feedback = 2.0 
+        fb_velocities = -(cable_errors * Kp_feedback)
 
-        desired_motor_units = desired_spool_rpm / 0.229 # convert to motor units (1 unit = 0.229 RPM)
+        # 3. Total Velocity Command
+        desired_cable_velocities = ff_velocities# + fb_velocities
 
+        # Convert to RPM and Motor Units
+        desired_spool_rpm = (desired_cable_velocities / self.spool_circumference) * 60 
+        desired_motor_units = desired_spool_rpm / 0.229 
         velocity_int_list = [int(v) for v in desired_motor_units]
 
         # Tension safety check
@@ -175,8 +196,6 @@ class CDPRControlNode(Node):
             f"{current_forces[0]:.2f}, {current_forces[1]:.2f}, {current_forces[2]:.2f}, {current_forces[3]:.2f}]",
             throttle_duration_sec=0.2
         )
-
-        # Prints
         self.get_logger().info(
             f"self.pose: ["
             f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
