@@ -41,9 +41,9 @@ class CDPRControlNode(Node):
         self.home_tension = 25 # Newton
         self.movement_speed = 0.01 # m/s
         self.rotation_speed = 0.1 # rad/s
-        self.stopping_radius_pos = 1e-6
-        self.slowdown_radius_pos = 0.01
-        self.stopping_rot = 1e-6
+        self.stopping_radius_pos = 1e-3 # m
+        self.slowdown_radius_pos = 0.01 # m
+        self.stopping_rot = 1e-3 # rad
 
         self.control_loop_period = 0.02  # 50 Hz
 
@@ -127,8 +127,8 @@ class CDPRControlNode(Node):
         delta_pos_norm = np.linalg.norm(delta_pos)
         if delta_pos_norm < self.stopping_radius_pos:
             delta_pos_scaled = np.array([0.0, 0.0])
-        elif delta_pos_norm < self.stopping_radius_pos:
-            delta_pos_scaled = delta_pos / self.slowdown_radius_pos
+        # elif delta_pos_norm < self.slowdown_radius_pos:
+        #     delta_pos_scaled = delta_pos
         else:
             delta_pos_scaled = delta_pos / delta_pos_norm
         
@@ -138,7 +138,7 @@ class CDPRControlNode(Node):
 
         # Pose estimation with integration
         self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
-        self.pose[2] = self.pose[2] + delta_ori * self.rotation_speed * self.control_loop_period
+        self.pose[2] = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
 
         # Clamp pose
         margin = 0.05 # m
