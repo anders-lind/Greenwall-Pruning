@@ -44,6 +44,17 @@ class DynamixelSync:
     
 
     def setTurningDirection(self, motors: list[int], directions: list[int]) -> None:
+        # Check if direction contain invalid values (anything other than -1 and 1)
+        for i in range(len(directions)):
+            if not (directions[i] == -1 or directions[i] == 1):
+                print(f"Warning: Turning direction contains the invalid number \"{directions[i]}\"! Only -1 and 1 allowed.")
+                if directions[i] >= 0:
+                    directions[i] = 1
+                    print(f"Warning: Turning direction have been automatically set to 1")
+                else:
+                    directions[i] = -1
+                    print(f"Warning: Turning direction have been automatically set to -1")
+
         for i in range(len(motors)):
             self.motorDirections[motors[i]] = directions[i]
 
@@ -168,8 +179,3 @@ if __name__  == "__main__":
     # for i in range(1000):
     values = dmx.read(motors, CONTROL_TABLE.PRESENT_POSITION)
     print(values)
-    
-
-
-    # test read
-    # test disable torque
