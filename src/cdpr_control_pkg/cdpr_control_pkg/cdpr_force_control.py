@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import time
 
 
-class CDPRControlNode(CDPRBaseControlNode):
+class CDPRForceControlNode(CDPRBaseControlNode):
     def __init__(self):
         super().__init__('cdpr_force_control')
 
@@ -91,7 +91,7 @@ class CDPRControlNode(CDPRBaseControlNode):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = CDPRControlNode()
+    node = CDPRForceControlNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

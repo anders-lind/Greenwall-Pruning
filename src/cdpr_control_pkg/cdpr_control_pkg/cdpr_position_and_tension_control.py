@@ -8,7 +8,7 @@ from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 from cdpr_control_pkg.cdpr_control_base_class import CDPRBaseControlNode
 
 
-class CDPRControlNode(CDPRBaseControlNode):
+class CDPRPositionAndTensionControlNode(CDPRBaseControlNode):
     def __init__(self):
         super().__init__('cdpr_position_and_tension_control')
 
@@ -86,7 +86,7 @@ class CDPRControlNode(CDPRBaseControlNode):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = CDPRControlNode()
+    node = CDPRPositionAndTensionControlNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
