@@ -16,6 +16,7 @@ class CDPRPathplannerNode(Node):
         CDPR_width = 0.908
         CDPR_height = 0.944
         self.initial_pose = np.array([CDPR_width/2, 0.52-0.03])
+        self.clear_homing_stick = self.initial_pose + np.array([0.0, 0.05])
         self.center_pos = np.array([CDPR_width/2, CDPR_height/2])
         self.current_target_idx = 0
         self.smoothing_radius = 0.005 # 0.5 cm
