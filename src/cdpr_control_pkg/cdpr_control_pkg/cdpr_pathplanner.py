@@ -14,27 +14,43 @@ class CDPRPathplannerNode(Node):
         self.current_pose = None
 
         CDPR_width = 0.908
+        CDPR_height = 0.944
         self.initial_pose = np.array([CDPR_width/2, 0.52-0.03])
+        self.center_pos = np.array([CDPR_width/2, CDPR_height/2])
         self.current_target_idx = 0
         self.smoothing_radius = 0.005 # 0.5 cm
 
+        self.CDPR_height = 0.944
+        self.CDPR_width = 0.908
+
         # Square path around the initial pose
-        self.square_poses = [
-            self.initial_pose + np.array([0.00, 0.05]), # 5 cm up
-            self.initial_pose + np.array([0.05, 0.05]), # 5 cm up and 5 cm right
-            self.initial_pose + np.array([0.05, -0.05]), # 5 cm right and 5 cm down
-            self.initial_pose + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
-            self.initial_pose + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
-            self.initial_pose + np.array([0.0, 0.05]), # 5 cm up
-            self.initial_pose + np.array([0.0, 0.0]) # back to initial pose
-        ]
+        # self.square_poses = [
+        #     self.initial_pose + np.array([0.00, 0.05]), # 5 cm up
+        #     self.initial_pose + np.array([0.05, 0.05]), # 5 cm up and 5 cm right
+        #     self.initial_pose + np.array([0.05, -0.05]), # 5 cm right and 5 cm down
+        #     self.initial_pose + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
+        #     self.initial_pose + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
+        #     self.initial_pose + np.array([0.0, 0.05]), # 5 cm up
+        #     self.initial_pose + np.array([0.0, 0.0]) # back to initial pose
+        # ]
+
+        # Workspace test poses
+        self.pos = [self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
+        # self.pos = [self.center_pos, np.array([self.CDPR_width, 0.0])] # bottom right corner
+        # self.pos = [self.center_pos, np.array([0.0, 0.0])] # bottom left corner
+        # self.pos = [self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
+
+        # self.pos = [self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
+        # self.pos = [self.center_pos, np.array([self.CDPR_width/2, 0.0])] # bottom side
+        # self.pos = [self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
+        # self.pos = [self.center_pos, np.array([self.CDPR_width/2, self.CDPR_height])] # top side
 
         self.pathplanner_loop_period = 0.02
 
         # ROS Infrastructure
         self.goto_pose_publisher = self.create_publisher(CdprPose, '/cdpr/goto_pose', 10)
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
-        self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_online_circle)
+        self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_from_poselist)
 
         self.get_logger().info("CDPR Pathplanner Node has been started")
 
