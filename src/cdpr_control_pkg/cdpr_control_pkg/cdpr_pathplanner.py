@@ -13,10 +13,13 @@ class CDPRPathplannerNode(Node):
 
         self.current_pose = None
 
+        self.end_effector_height = 0.03916
+        self.end_effector_width = 0.09322
+
         CDPR_width = 0.908
         CDPR_height = 0.944
-        self.initial_pose = np.array([CDPR_width/2, 0.52-0.03])
-        self.clear_homing_stick = self.initial_pose + np.array([0.0, 0.05])
+        self.initial_pos = np.array([CDPR_width/2, 0.52-0.03])
+        self.clear_homing_stick = self.initial_pos + np.array([0.0, 0.05])
         self.center_pos = np.array([CDPR_width/2, CDPR_height/2])
         self.current_target_idx = 0
         self.smoothing_radius = 0.005 # 0.5 cm
@@ -36,13 +39,13 @@ class CDPRPathplannerNode(Node):
         # ]
 
         # Workspace test poses
-        self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
+        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])] # bottom right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, 0.0])] # bottom left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
 
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, 0.0])] # bottom side
+        self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_height])] # top side
 
@@ -65,18 +68,29 @@ class CDPRPathplannerNode(Node):
         if self.current_pose is None:
             return
 
-        if self.current_target_idx >= len(self.square_poses):
+        if self.current_target_idx >= len(self.pos):
             return
 
         # Go to towards next point until within smoothing radius, then switch to next point
-        if np.linalg.norm(self.current_pose[0:2] -self.square_poses[self.current_target_idx]) < self.smoothing_radius:
+        if np.linalg.norm(self.current_pose[0:2] -self.pos[self.current_target_idx]) < self.smoothing_radius:
             self.current_target_idx = self.current_target_idx + 1
-            if self.current_target_idx >= len(self.square_poses):
+            if self.current_target_idx >= len(self.pos):
                 return
+        
+        orientation = 0.0
 
-        goto_pose_msg.position = self.square_poses[self.current_target_idx].tolist()
-        goto_pose_msg.orientation = 0.0
+        # Clip pos
+        min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
+        max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
+        self.pos[self.current_target_idx] = np.clip(self.pos[self.current_target_idx], min_pos, max_pos)
 
+        # Clip ori
+        abs_max_ori = 0.3
+        orientation = np.clip(orientation, -abs_max_ori, abs_max_ori)
+        
+        # Publish target
+        goto_pose_msg.position = self.pos[self.current_target_idx].tolist()
+        goto_pose_msg.orientation = orientation
         self.goto_pose_publisher.publish(goto_pose_msg)
 
     # def pathplanner_online_circle(self):
@@ -125,12 +139,12 @@ class CDPRPathplannerNode(Node):
         # FIX: Changed >= to > so it includes index 20 (which is 360 degrees, closing the loop)
         if self.current_target_idx > circle_discretization:
             # Trajectory complete: return to center
-            target_pose = self.initial_pose
+            target_pose = self.initial_pos
         else:
             # Calculate the specific point on the circle for the current index
             # FIX: Added np.pi/2 to start at the TOP of the circle [0, r]
             current_angle = (angle_step * self.current_target_idx) + (np.pi / 2)
-            target_pose = self.initial_pose + np.array([np.cos(current_angle), np.sin(current_angle)]) * circle_radius
+            target_pose = self.initial_pos + np.array([np.cos(current_angle), np.sin(current_angle)]) * circle_radius
 
         # 2. Check distance to the ACTIVE target pose
         if self.current_target_idx <= circle_discretization:
@@ -142,10 +156,10 @@ class CDPRPathplannerNode(Node):
                 
                 # 3. Update target_pose immediately for the current frame
                 if self.current_target_idx > circle_discretization:
-                    target_pose = self.initial_pose
+                    target_pose = self.initial_pos
                 else:
                     new_angle = (angle_step * self.current_target_idx) + (np.pi / 2)
-                    target_pose = self.initial_pose + np.array([np.cos(new_angle), np.sin(new_angle)]) * circle_radius
+                    target_pose = self.initial_pos + np.array([np.cos(new_angle), np.sin(new_angle)]) * circle_radius
 
         # 4. Construct message and publish
         goto_pose_msg = CdprPose()
