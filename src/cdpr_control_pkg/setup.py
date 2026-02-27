@@ -30,7 +30,9 @@ setup(
             'cdpr_position_and_tension_control = cdpr_control_pkg.cdpr_position_and_tension_control:main',
             'cdpr_force_control = cdpr_control_pkg.cdpr_force_control:main',
             'cdpr_manual_homing = cdpr_control_pkg.cdpr_manual_homing:main',
-            'cdpr_pathplanner = cdpr_control_pkg.cdpr_pathplanner:main'
+            'cdpr_pathplanner = cdpr_control_pkg.cdpr_pathplanner:main',
+            'cdpr_visualizer = cdpr_control_pkg.cdpr_visualizer:main',
+            'visualizer_tester = cdpr_control_pkg.visualizer_tester:main'
         ],
     },
 )
