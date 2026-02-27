@@ -116,6 +116,10 @@ class DynamixelSync:
         success = group_sync_read.txRxPacket()
         if success != 0:
             print("ERROR: Could not read. Got result:", success)
+            for i in range(len(motors)):
+                values.append(None)
+            return values
+
 
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
