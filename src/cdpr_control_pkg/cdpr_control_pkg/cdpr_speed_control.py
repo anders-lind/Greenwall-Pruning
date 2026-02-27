@@ -60,15 +60,11 @@ class CDPRSpeedControlNode(CDPRBaseControlNode):
         velocity_int_list = [int(v) for v in desired_motor_units]
 
         # Tension safety check
-        tension_threshold = 40.0 # Newton
-        current_forces = self.motor_current_units_to_force(self.get_present_current())
-        if ((np.any(current_forces > tension_threshold)) and (self.loop_counter > 10)):
-            self.motors.disable_torque(motors=[1,2,3,4])
-            self.control_timer.cancel()
-            self.get_logger().warn(f"Tension threshold ({tension_threshold} N) exceeded! Current forces: {current_forces}")
+        if not self.is_tensions_within_tolerence():
             return
 
         # Prints
+        current_forces = self.motor_current_units_to_force(self.get_present_current())
         self.get_logger().info(
             f"current_forces: ["
             f"{current_forces[0]:.2f}, {current_forces[1]:.2f}, {current_forces[2]:.2f}, {current_forces[3]:.2f}]",
@@ -87,11 +83,11 @@ class CDPRSpeedControlNode(CDPRBaseControlNode):
             f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}, {delta_ori:.4f}]",
             throttle_duration_sec=0.2
         )
-        self.get_logger().info(
-            f"cable_lengths: ["
-            f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, {self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"cable_lengths: ["
+        #     f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, {self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
         self.get_logger().info(
             f"-----------------------------------------------",
             throttle_duration_sec=0.2
@@ -112,7 +108,7 @@ class CDPRSpeedControlNode(CDPRBaseControlNode):
         
         # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
-        self.loop_counter += 1
+        self.control_loop_counter += 1
 
 def main(args=None):
     rclpy.init(args=args)

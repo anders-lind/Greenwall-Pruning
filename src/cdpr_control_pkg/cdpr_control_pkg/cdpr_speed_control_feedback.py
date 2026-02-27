@@ -69,7 +69,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         cable_errors = current_ideal_lengths - self.cable_lengths 
         
         # Proportional Gain (Tune this! Start small. 2.0 means it corrects errors over ~0.5 seconds)
-        Kp_feedback = 2.0 
+        Kp_feedback = 2.0
         fb_velocities = -(cable_errors * Kp_feedback)
 
         # 3. Total Velocity Command
@@ -80,14 +80,20 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         desired_motor_units = desired_spool_rpm / 0.229 
         velocity_int_list = [int(v) for v in desired_motor_units]
 
+        # # Tension safety check
+        # current_forces = self.motor_current_units_to_force(self.get_present_current())
+        # if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
+        #     self.motors.disable_torque(motors=[1,2,3,4])
+        #     self.control_timer.cancel()
+        #     self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
+        #     return
+        
+
         # Tension safety check
-        tension_threshold = 40.0 # Newton
-        current_forces = self.motor_current_units_to_force(self.get_present_current())
-        if ((np.any(current_forces > tension_threshold)) and (self.loop_counter > 10)):
-            self.motors.disable_torque(motors=[1,2,3,4])
-            self.control_timer.cancel()
-            self.get_logger().warn(f"Tension threshold ({tension_threshold} N) exceeded! Current forces: {current_forces}")
+        if not self.is_tensions_within_tolerence():
             return
+
+
 
         # Prints
         self.get_logger().info(
@@ -101,16 +107,31 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
             f"{self.pose[2]:.4f}]",
             throttle_duration_sec=0.2
         )
+        # self.get_logger().info(
+        #     f"delta_pose: ["
+        #     f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}, {delta_ori:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
         self.get_logger().info(
-            f"delta_pose: ["
-            f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}, {delta_ori:.4f}]",
+            f"goal_pose: ["
+            f"{goal_pose[0]:.4f}, {goal_pose[1]:.4f}, {goal_pose[2]:.4f}]",
             throttle_duration_sec=0.2
         )
-        self.get_logger().info(
-            f"cable_lengths: ["
-            f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, {self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"cable_lengths: ["
+        #     f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, {self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"current_ideal_lengths: ["
+        #     f"{current_ideal_lengths[0]:.4f}, {current_ideal_lengths[1]:.4f}, {current_ideal_lengths[2]:.4f}, {current_ideal_lengths[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"desired_cable_velocities: ["
+        #     f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, {desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
         self.get_logger().info(
             f"-----------------------------------------------",
             throttle_duration_sec=0.2
@@ -131,7 +152,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         
         # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
-        self.loop_counter += 1
+        self.control_loop_counter += 1
 
 def main(args=None):
     rclpy.init(args=args)

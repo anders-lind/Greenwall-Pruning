@@ -14,16 +14,25 @@ import time
 
 class CDPRBaseControlNode(Node):
     def __init__(self, node_name):
-        super().__init__('cdpr_speed_control')
-
+        super().__init__(node_name)
         print("CDPRBaseControlNode constructor")
 
-        self.loop_counter = 0
-
         # Node state variables
-        self.last_buttons_state = None
         self.homing_active = False
+        self.homing_loop_counter = 0
+        self.control_loop_counter = 0
+        self.last_buttons_state = None
+        self.control_loop_period = 0.02 # 50 Hz
+
+        # Homing parameters
         self.homing_speed = int(30) # Motor units [0.229 RPM]
+        self.home_tension = 5 # Newton
+        self.force_tension_time = 0.1 # S
+        self.homing_loop_period = self.control_loop_period
+
+        # Tension safety check parameters
+        self.tension_threshold = 40.0 # Newton (40)
+        self.tension_thresholds = [self.tension_threshold, self.tension_threshold, self.tension_threshold, self.tension_threshold] # Newton
 
         # CDPR parameters
         self.spool_radius = 0.0115 - 0.001 # spool outer radius minus cable radius
@@ -45,28 +54,25 @@ class CDPRBaseControlNode(Node):
         self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
 
         # CONTROLLER GAINS
-        self.home_tension = 25 # Newton
         self.movement_speed = 0.01 # m/s
         self.rotation_speed = 0.1 # rad/s
         self.stopping_radius_pos = 1e-3 # m
         self.slowdown_radius_pos = 0.01 # m
         self.stopping_rot = 1e-3 # rad
 
-        self.control_loop_period = 0.02  # 50 Hz
-
         # Motor encoder filter variables
-        self.motor_feedback_period = 0.01 # 100 Hz
         self.filter_alpha = 0.7 # Smoothing factor for encoders
+        self.motor_feedback_period = 0.01 # 100 Hz
         
         # State variables
-        self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.initial_pose = np.array([self.CDPR_width/2, 0.52-0.03, 0.0]) # (x, y, theta)
+        self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.pose = self.initial_pose.copy()
         self.target_pose = self.initial_pose.copy() # (x, y, theta)
         self.previous_pose = self.initial_pose.copy() # (x, y, theta)
 
         # Motor initialization
-        self.motors = DynamixelSyncDummy()
+        self.motors = DynamixelSync()
         self.motors.setTurningDirection(motors=[1,2,3,4], directions=[-1,-1,1,1])
         self.motors.disable_torque(motors=[1,2,3,4])
         # self.motors.write(motors=[1,2,3,4], values=128, control_type=CONTROL_TABLE.VELOCITY_LIMIT)
@@ -84,7 +90,7 @@ class CDPRBaseControlNode(Node):
         
         self.control_timer = self.create_timer(self.control_loop_period, self.command_robot)
         self.control_timer.cancel()
-        self.background_timer = self.create_timer(self.control_loop_period, self.background_tasks)
+        self.homing_timer = self.create_timer(self.homing_loop_period, self.homing)
         self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.motor_feedback)
 
         self.get_logger().info(f"{node_name} Node has been started.")
@@ -107,6 +113,10 @@ class CDPRBaseControlNode(Node):
         
         # Zero the encoders at this position
         self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        while np.any(np.array(self.zero_offsets) == None):
+            print("Could not read zero offsets")
+            self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+
     
     def joy_callback(self, msg: Joy):
         self.handle_button_events(msg.buttons)
@@ -127,26 +137,35 @@ class CDPRBaseControlNode(Node):
     def command_robot(self):
         print("Base Command_robot() call")
 
-    def background_tasks(self):
-        # Homing procedure
+    def homing(self):
         if self.homing_active:
+            self.homing_loop_counter += 1
+
+            # Begin tightening tensions
             present_current_list = self.get_present_current()
             force_list = self.motor_current_units_to_force(present_current_list)
             tigthen_array = [0,0,0,0]
             not_tightened = False
             for i in range(4):
-                print(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N, tightening...")
-                if force_list[i] < self.home_tension:
+                # Only check tension after 0.1s
+                if (self.homing_loop_counter * self.homing_loop_period <= self.force_tension_time):
+                    tigthen_array = [self.homing_speed, self.homing_speed, self.homing_speed, self.homing_speed]
+                    not_tightened = True
+                    print(f"Slow start tensioning: {force_list[0]:.2f}, {force_list[1]:.2f}, {force_list[2]:.2f}, {force_list[3]:.2f}, ")
+                    break
+                elif (force_list[i] < self.home_tension):
                     tigthen_array[i] = self.homing_speed
                     not_tightened = True
                 else:
                     tigthen_array[i] = 0
+                print(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
             self.motors.enable_torque(motors=[1,2,3,4])
             self.motors.write(
                 motors=[1,2,3,4],
                 control_type=CONTROL_TABLE.GOAL_VELOCITY,
                 values=tigthen_array
             )
+
             # When all cables reach the desired tension, stop tightening and reinitialize state
             if not not_tightened:
                 self.homing_active = False
@@ -155,13 +174,45 @@ class CDPRBaseControlNode(Node):
                     control_type=CONTROL_TABLE.GOAL_VELOCITY,
                     values=[0,0,0,0]
                 )
-                # self.motors.disable_torque(motors=[1,2,3,4])
                 self.initialize_state()
+                self.homing_loop_counter = 0
                 self.get_logger().info('Homing complete.')
+
+            return
+
+    def is_tensions_within_tolerence(self):
+        current_forces = self.motor_current_units_to_force(self.get_present_current())
+        if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
+            self.motors.disable_torque(motors=[1,2,3,4])
+            self.control_timer.cancel()
+            self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
+            return False
+        
+        return True
+        
+    def tension_safety_check_advanced(self):
+        return
+        #TODO: Make this
+        current_forces = self.motor_current_units_to_force(self.get_present_current())
+        delta_thresholds = self.tension_thresholds - current_forces
+
+        tension_reached = False
+        for i in range(len(delta_thresholds)):
+            if delta_thresholds[i] <= 0:
+                tension_reached = True
+
+        if ((np.any(delta_thresholds)) and (self.control_loop_counter > 10)):
+            self.motors.disable_torque(motors=[1,2,3,4])
+            self.control_timer.cancel()
+            self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
             return
 
     def motor_feedback(self):   
         raw_lengths = self.get_current_cable_lengths()
+        
+        if np.any(raw_lengths == None):
+            return
+        
         # Apply Exponential Moving Average (first order low pass)
         self.cable_lengths = (
             self.filter_alpha * raw_lengths + 
@@ -170,14 +221,25 @@ class CDPRBaseControlNode(Node):
 
     def get_current_cable_lengths(self):
         positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
-        motor_encoder_positions = np.array(positions_list) - self.zero_offsets
+        positions_list = np.array(positions_list)
+
+        if np.any(positions_list == None):
+            return np.array([None, None, None, None])
+        
+        motor_encoder_positions = positions_list - self.zero_offsets
         motor_encoder_rotations = motor_encoder_positions / 4096
         current_cable_lengths = self.initial_cable_lengths - motor_encoder_rotations * self.get_spool_circumference()
         return current_cable_lengths
 
     def get_present_current(self):
         currents_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT)
-        return np.array(currents_list)
+        currents_list = np.array(currents_list)
+
+        if np.any(currents_list == None):
+            self.motors.disable_torque(motors=[1,2,3,4])
+            print("ERROR: Could not read currents!")
+
+        return currents_list
 
     def get_spool_circumference(self):
         return self.spool_circumference
@@ -295,6 +357,17 @@ class CDPRBaseControlNode(Node):
                 self.control_timer.cancel()
                 self.motors.disable_torque(motors=[1,2,3,4])
                 self.get_logger().info('Control loop STOPPED.')
+            # Stop homing procedure
+            if self.homing_active:
+                self.homing_active = False
+                self.motors.write(
+                    motors=[1,2,3,4],
+                    control_type=CONTROL_TABLE.GOAL_VELOCITY,
+                    values=[0,0,0,0]
+                )
+                self.motors.disable_torque(motors=[1,2,3,4])
+                self.homing_loop_counter = 0
+                self.get_logger().info('Homing loop STOPPED.')
 
         # Button X (rising edge)
         if current_buttons[2] == 1 and self.last_buttons_state[2] == 0:
@@ -321,7 +394,7 @@ class CDPRBaseControlNode(Node):
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
             # Start homing procedure (only when cdpr control loop is inactive)
             if self.control_timer.is_canceled():
-                self.homing_active = True
+                self.homing_active = True   
                 self.get_logger().info('Homing started.')
 
         # Button LB (rising edge)
@@ -330,16 +403,7 @@ class CDPRBaseControlNode(Node):
 
         # Button RB (rising edge)
         if current_buttons[5] == 1 and self.last_buttons_state[5] == 0:
-            # Cancel homing procedure
-            if self.homing_active:
-                self.homing_active = False
-                self.motors.write(
-                    motors=[1,2,3,4],
-                    control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                    values=[0,0,0,0]
-                )
-                self.motors.disable_torque(motors=[1,2,3,4])
-                self.get_logger().info('Homing cancelled.')
+            pass
 
         self.last_buttons_state = current_buttons
 

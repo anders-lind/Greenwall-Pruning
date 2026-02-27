@@ -36,19 +36,6 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         else:
             delta_pos = delta_pos_unscaled/delta_pos_norm
 
-        
-        self.get_logger().info(
-            f"delta_pos_unscaled: ["
-            f"{delta_pos_unscaled[0]:.4f}, {delta_pos_unscaled[1]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-
-        self.get_logger().info(
-            f"delta_pos_norm: ["
-            f"{delta_pos_norm}]",
-            throttle_duration_sec=0.2
-        )
-
         # Pose estimation with integration
         self.pose[0:2] = self.pose[0:2] + delta_pos * self.movement_speed * self.control_loop_period
         self.pose[2:3] = self.pose[2:3] + delta_ori * self.rotation_speed * self.control_loop_period
@@ -75,45 +62,52 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
 
         velocity_int_list = [int(v) for v in desired_motor_units]
 
+        # Tension safety check
+        if not self.is_tensions_within_tolerence():
+            return
+
+        # Prints
+        current_forces = self.motor_current_units_to_force(self.get_present_current())
         self.get_logger().info(
-            f"ref_direction: ["
-            f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}]",
+            f"current_forces: ["
+            f"{current_forces[0]:.2f}, {current_forces[1]:.2f},"
+            f"{current_forces[2]:.2f}, {current_forces[3]:.2f}],",
             throttle_duration_sec=0.2
         )
-        self.get_logger().info(
-            f"self.pose: ["
-            f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
-            f"{self.pose[2]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-        self.get_logger().info(
-            f"self.cable_lengths: ["
-            f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, "
-            f"{self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-        self.get_logger().info(
-            f"desired_cable_lengths: ["
-            f"{desired_cable_lengths[0]:.4f}, {desired_cable_lengths[1]:.4f}, "
-            f"{desired_cable_lengths[2]:.4f}, {desired_cable_lengths[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-        self.get_logger().info(
-            f"desired_velocity_linear: ["
-            f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, "
-            f"{desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-        self.get_logger().info(
-            f"velocity_int_list: ["
-            f"{velocity_int_list[0]:.4f}, {velocity_int_list[1]:.4f}, "
-            f"{velocity_int_list[2]:.4f}, {velocity_int_list[3]:.4f}]",
-            throttle_duration_sec=0.2
-        )
-        self.get_logger().info(
-            f"-----------------------------------------------",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"self.pose: ["
+        #     f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
+        #     f"{self.pose[2]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"self.cable_lengths: ["
+        #     f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, "
+        #     f"{self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"desired_cable_lengths: ["
+        #     f"{desired_cable_lengths[0]:.4f}, {desired_cable_lengths[1]:.4f}, "
+        #     f"{desired_cable_lengths[2]:.4f}, {desired_cable_lengths[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"desired_velocity_linear: ["
+        #     f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, "
+        #     f"{desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"velocity_int_list: ["
+        #     f"{velocity_int_list[0]:.4f}, {velocity_int_list[1]:.4f}, "
+        #     f"{velocity_int_list[2]:.4f}, {velocity_int_list[3]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
+        # self.get_logger().info(
+        #     f"-----------------------------------------------",
+        #     throttle_duration_sec=0.2
+        # )
         
 
         self.motors.enable_torque(motors=[1,2,3,4])
@@ -127,7 +121,9 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         current_pose_msg.orientation = self.pose[2]
         self.current_pose_publisher.publish(current_pose_msg)
 
+        # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
+        self.control_loop_counter += 1
 
 def main(args=None):
     rclpy.init(args=args)
