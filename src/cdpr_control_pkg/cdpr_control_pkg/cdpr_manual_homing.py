@@ -69,7 +69,6 @@ class CDPRManualHomingNode(Node):
 
             # Button B (rising edge)
             if current_buttons[1] == 1 and self.last_buttons_state[1] == 0:
-                print("B")
                 self.motors.enable_torque(motors=[3])
                 self.motors.write(
                     motors=[3],
@@ -79,7 +78,6 @@ class CDPRManualHomingNode(Node):
             
             # Button B (falling edge)
             if current_buttons[1] == 0 and self.last_buttons_state[1] == 1:
-                print("B down")
                 self.motors.write(
                     motors=[3],
                     control_type=CONTROL_TABLE.GOAL_VELOCITY,
