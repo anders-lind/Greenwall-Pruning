@@ -2,126 +2,109 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import torch
-from segment_anything import sam_model_registry, SamPredictor
+import os
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
 
-# --- STEP 1: TRAINING (Mahalanobis) ---
-img_train = cv2.imread("4_Color.png")
-img_annot = cv2.imread("4_seg_yellow.png")
+# --- STEP 1: CONFIGURATION ---
+# Tuning parameters for your two target classes
+class_configs = {
+    "yellow": {"threshold": 5.0, "kernel_size": (5, 5)},
+    "brown":  {"threshold": 4.0, "kernel_size": (5, 5)}
+}
 
-lower_limit = (0, 0, 254)
-upper_limit = (1, 1, 256)
-mask_train = cv2.inRange(img_annot, lower_limit, upper_limit)
+# --- STEP 2: LOAD DATA & STATS (LAB Space) ---
+stats_path = "perception_stats_cielab.npy"
+training_stats = np.load(stats_path, allow_pickle=True).item()
 
-pixels_train = np.reshape(img_train, (-1, 3))
-mask_pixels_flat = np.reshape(mask_train, (-1))
-annot_pix_values = pixels_train[mask_pixels_flat == 255, ]
+test_file = "training_data/5_Color.png"
+img_bgr = cv2.imread(test_file)
+img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+img_lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2Lab).astype(float)
+rows, cols, _ = img_lab.shape
+pixels_lab = img_lab.reshape(-1, 3)
 
-mean = np.average(annot_pix_values, axis=0)
-cov = np.cov(annot_pix_values.transpose())
-inv_cov = np.linalg.inv(cov + np.eye(3) * 1e-6)
+# --- STEP 3: FIND THE LARGEST "ROTTEN" CLUSTER ---
+combined_rotten_mask = np.zeros((rows, cols), dtype=np.uint8)
 
-# --- STEP 2: PROCESSING TEST IMAGE ---
-test_file = "2_Color.png"
-img_test = cv2.imread(test_file)
-img_test_rgb = cv2.cvtColor(img_test, cv2.COLOR_BGR2RGB)
-rows, cols, _ = img_test.shape
-
-pixels_test = np.reshape(img_test, (-1, 3))
-diff = pixels_test - mean
-mahalanobis_dist = np.sum(diff * (diff @ inv_cov), axis=1)
-dist_img = np.reshape(mahalanobis_dist, (rows, cols))
-
-# --- STEP 3: FINDING THE SEED POINT ---
-threshold_val = 10
-raw_mask = (dist_img < threshold_val).astype(np.uint8) * 255
-
-# Clean the mask to find solid blobs
-kernel = np.ones((10, 10), np.uint8)
-mask_morphed = cv2.morphologyEx(raw_mask, cv2.MORPH_OPEN, kernel)
-mask_morphed = cv2.morphologyEx(mask_morphed, cv2.MORPH_CLOSE, kernel)
-
-# Find contours of the rotten areas
-contours, _ = cv2.findContours(mask_morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-if len(contours) > 0:
-    # 1. Find the largest blob (by area)
-    largest_contour = max(contours, key=cv2.contourArea)
+for cls in ["yellow", "brown"]:
+    mu = training_stats[cls]["mean"]
+    inv_cov = training_stats[cls]["inv_cov"]
     
-    # 2. Calculate the Centroid (Center of Mass)
+    diff = pixels_lab - mu
+    dist = np.sum(diff * (diff @ inv_cov), axis=1).reshape(rows, cols)
+    
+    # Binary mask for this specific class
+    mask = (dist < class_configs[cls]["threshold"]).astype(np.uint8) * 255
+    
+    # Morphological cleaning
+    kernel = np.ones(class_configs[cls]["kernel_size"], np.uint8)
+    morphed = cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel), cv2.MORPH_CLOSE, kernel)
+    
+    # Add to the combined rotten mask
+    combined_rotten_mask = cv2.bitwise_or(combined_rotten_mask, morphed)
+
+# Find all clusters in the combined mask
+contours, _ = cv2.findContours(combined_rotten_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+seed_point = None
+if contours:
+    # Identify the largest continuous blob
+    largest_contour = max(contours, key=cv2.contourArea)
     M = cv2.moments(largest_contour)
     if M["m00"] != 0:
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
-    else:
-        # Fallback to the first point if area is 0
-        cX, cY = largest_contour[0][0]
-    
-    seed_point = np.array([[cX, cY]])
-else:
-    print("No rotten leaves detected.")
-    seed_point = None
+        cX, cY = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
+        seed_point = np.array([[cX, cY]])
+        print(f"Seed point found at: ({cX}, {cY}) based on the largest {len(largest_contour)} pixel cluster.")
 
-# --- STEP 4: REFINEMENT WITH SAM ---
+# --- STEP 4: REFINEMENT WITH SAM 2 ---
+best_mask = None
 if seed_point is not None:
-    sam_checkpoint = "sam_vit_b_01ec64.pth"
-    model_type = "vit_b"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Running on: {device.upper()}")
+    home = os.path.expanduser("~")
+    sam2_checkpoint = os.path.join(home, "/home/alex/Thesis/sam2/checkpoints/sam2.1_hiera_small.pt")
+    model_cfg = "sam2_hiera_s.yaml"
 
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to(device=device)
-    predictor = SamPredictor(sam)
-    predictor.set_image(img_test_rgb)
-
-    # Prompt SAM with the centroid of the largest blob
-    masks, scores, _ = predictor.predict(
-        point_coords=seed_point,
-        point_labels=np.array([1]), 
-        multimask_output=True,
-    )
-
-    # Use the highest scoring mask
+    # Build and load weights (strict=False)
+    sam2_model = build_sam2(model_cfg, ckpt_path=None, device=device)
+    sd = torch.load(sam2_checkpoint, map_location=device, weights_only=True)["model"]
+    sam2_model.load_state_dict(sd, strict=False)
+    
+    predictor = SAM2ImagePredictor(sam2_model)
+    with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        predictor.set_image(img_rgb)
+        masks, scores, _ = predictor.predict(
+            point_coords=seed_point,
+            point_labels=np.array([1]), 
+            multimask_output=True,
+        )
     best_mask = masks[np.argmax(scores)]
-    final_segmented = cv2.bitwise_and(img_test, img_test, mask=best_mask.astype(np.uint8)*255)
-    final_segmented_rgb = cv2.cvtColor(final_segmented, cv2.COLOR_BGR2RGB)
 
 # --- STEP 5: VISUALIZATION ---
-plt.figure(figsize=(20, 5))
+plt.figure(figsize=(15, 10))
 
-# Panel 1: Original
-plt.subplot(1, 4, 1)
-plt.title(f"1. Original: {test_file}")
-plt.imshow(img_test_rgb)
-if 'seed_point' in locals() and seed_point is not None:
-    plt.scatter(seed_point[0,0], seed_point[0,1], color='red', marker='x', s=100)
+plt.subplot(2, 2, 1)
+plt.title("1. Original + Seed Point")
+plt.imshow(img_rgb)
+if seed_point is not None:
+    plt.scatter(seed_point[0,0], seed_point[0,1], color='red', marker='x', s=200, lw=3)
 plt.axis('off')
 
-# Panel 2: Mahalanobis Result
-plt.subplot(1, 4, 2)
-plt.title("2. Mahalanobis Mask")
-plt.imshow(mask_morphed, cmap='gray')
+plt.subplot(2, 2, 2)
+plt.title("2. Combined Mahalanobis (Yellow+Brown)")
+plt.imshow(combined_rotten_mask, cmap='gray')
 plt.axis('off')
 
-# Panel 3 & 4: SAM Results (Only if detected)
-if 'best_mask' in locals():
-    plt.subplot(1, 4, 3)
-    plt.title("3. SAM Refined Mask")
-    plt.imshow(best_mask, cmap='gray')
+if best_mask is not None:
+    plt.subplot(2, 2, 3)
+    plt.title("3. SAM 2 Refined Mask")
+    plt.imshow(best_mask, cmap='viridis')
     plt.axis('off')
 
-    plt.subplot(1, 4, 4)
-    plt.title("4. Final Segmented Leaf")
-    plt.imshow(final_segmented_rgb)
-    plt.axis('off')
-else:
-    plt.subplot(1, 4, 3)
-    plt.text(0.5, 0.5, 'No Detection\nTry increasing\nthreshold_val', 
-             ha='center', va='center', fontsize=12, color='red')
-    plt.axis('off')
-    
-    plt.subplot(1, 4, 4)
-    plt.title("4. Final Result")
-    plt.imshow(np.zeros_like(img_test_rgb)) # Black image
+    plt.subplot(2, 2, 4)
+    plt.title("4. Final Pruning Target")
+    final_view = cv2.bitwise_and(img_rgb, img_rgb, mask=best_mask.astype(np.uint8))
+    plt.imshow(final_view)
     plt.axis('off')
 
 plt.tight_layout()
