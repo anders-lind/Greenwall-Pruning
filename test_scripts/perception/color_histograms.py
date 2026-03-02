@@ -10,7 +10,7 @@ annotation_types = ['yellow']#, 'yellow', 'glossy']
 all_rotten_pixels = []
 
 for idx in image_indices:
-    img_path = f"{idx}_Color.png"
+    img_path = f"training_data/{idx}_Color.png"
     if not os.path.exists(img_path):
         continue
         
@@ -18,7 +18,7 @@ for idx in image_indices:
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
     for annot_type in annotation_types:
-        annot_path = f"{idx}_seg_{annot_type}.png"
+        annot_path = f"training_data/{idx}_seg_{annot_type}.png"
         
         if os.path.exists(annot_path):
             annot_img = cv2.imread(annot_path)
