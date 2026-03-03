@@ -91,9 +91,9 @@ def mahalanobis_distance(pixels: np.ndarray, mean: np.ndarray, inv_cov: np.ndarr
 
 def main():
     # --- configuration ----------------------------------------------------
-    train_img_file = "4_Color.png"          # image used for computing mean/cov
-    train_annot_file = "4_seg_yellow.png"  # annotation; nonzero pixels indicate class
-    test_img_file = "2_Color.png"           # image to score
+    train_img_file = "training_data/4_Color.png"          # image used for computing mean/cov
+    train_annot_file = "training_data/4_seg_yellow.png"  # annotation; nonzero pixels indicate class
+    test_img_file = "training_data/2_Color.png"           # image to score
 
     #color_spaces = ["RGB", "LAB", "HSV", "YCrCb"]
     color_spaces = ["RGB", "LAB", "HSV"]
@@ -231,10 +231,10 @@ def main():
         ax1.plot(thresholds, np.array(tp_history[space]) / total * 100.0, label=f"TP% {space}")
     ax1.set_xlabel('Threshold')
     ax1.set_ylabel('Percent of image (%)')
-    ax1.set_xscale('log')
-    ax1.set_yscale('log')
-    ax1.set_title('True Positive (%) vs Threshold (log-log)')
-    ax1.legend(loc='best', fontsize='small')
+    # linear axes
+    ax1.set_title('True Positive (%) vs Threshold')
+    ax1.legend(loc='best',fontsize='small')
+    ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
 
     # FP percentage
     ax2 = plt.subplot(2, 2, 2)
@@ -242,10 +242,10 @@ def main():
         ax2.plot(thresholds, np.array(fp_history[space]) / total * 100.0, label=f"FP% {space}")
     ax2.set_xlabel('Threshold')
     ax2.set_ylabel('Percent of image (%)')
-    ax2.set_xscale('log')
-    ax2.set_yscale('log')
-    ax2.set_title('False Positive (%) vs Threshold (log-log)')
-    ax2.legend(loc='best', fontsize='small')
+    # linear axes
+    ax2.set_title('False Positive (%) vs Threshold')
+    ax2.legend(loc='best',fontsize='small')
+    ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
 
     # TP/FP ratio (use log scale to handle large ratios)
     ax3 = plt.subplot(2, 1, 2)
@@ -259,8 +259,8 @@ def main():
         ax3.plot(thresholds, ratios, label=space)
     ax3.set_xlabel('Threshold')
     ax3.set_ylabel('TP / FP (ratio)')
-    ax3.set_yscale('log')
-    ax3.set_title('TP/FP Ratio vs Threshold (log scale)')
+    # linear y-axis
+    ax3.set_title('TP/FP Ratio vs Threshold')
     ax3.legend(loc='best', fontsize='small')
 
     plt.tight_layout()

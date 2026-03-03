@@ -7,15 +7,16 @@
   <maintainer email="alexellegaard@gmail.com">alex</maintainer>
   <license>TODO: License declaration</license>zz
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <depend>ament_copyright</depend>
+  <depend>ament_flake8</depend>
+  <depend>ament_pep257</depend>
+  <depend>python3-pytest</depend>
 
-  <exec_depend>dxl_lib</exec_depend>
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>dynamixel_sdk</exec_depend>
-  <exec_depend>plantwall_custom_interfaces</exec_depend>
+  <!-- <depend>dxl_lib</depend> -->
+  <depend>rclpy</depend>
+  <depend>python-pygithub3</depend>
+  <depend>dynamixel_sdk</depend>
+  <depend>plantwall_custom_interfaces</depend>
 
   <export>
     <build_type>ament_python</build_type>

@@ -12,3 +12,6 @@ pip install dynamixel_sdk --break-system-packages
 ``` bash
 sudo chmod a+rw /dev/ttyUSB*
 ```
+
+4. Install SAM2 for image segmentation \
+Follow This install guide: https://github.com/facebookresearch/sam2?tab=readme-ov-file

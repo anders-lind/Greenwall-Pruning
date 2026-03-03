@@ -1,8 +1,11 @@
 /log/*
 /build/*
 /install/*
-.env/
 
+.env/
 .vscode/*
+__pycache__/
 
 Position_Control_of_a_Fully_Constrained_Planar_Cable-Driven_Parallel_Robot_With_Unknown_or_Partially_Known_Dynamics.pdf
+
+/sam2/
