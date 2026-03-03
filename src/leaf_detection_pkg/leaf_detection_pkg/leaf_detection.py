@@ -5,6 +5,13 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image # Import the Image message type
 from plantwall_custom_interfaces.msg import CdprPose
 import torch
+import numpy as np
+from cv_bridge import CvBridge
+import matplotlib.pyplot as plt
+import os
+import cv2
+
+from sam2.build_sam import build_sam2
 
 class LeafDetectionNode(Node):
     def __init__(self):
@@ -12,9 +19,24 @@ class LeafDetectionNode(Node):
         self.get_logger().info("Leaf Detection Node has been started.")
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.get_logger().info(f"Using {self.device} for leaf detection.")
+
+        self.cv_bridge = CvBridge()
+        self.color_image: np.ndarray = np.zeros(0)
+        self.depth_image: np.ndarray = np.zeros(0)
+
+        self.contour_area_threshold = 100 # pixels
 
         self.control_loop_period = 0.1 # 10 Hz
         self.control_timer = self.create_timer(self.control_loop_period, self.leaf_detector)
+
+        # Load training
+        # mahal_data_path = "/home/anders/workspace/masters_thesis/Greenwall-Pruning/test_scripts/perception/perception_stats_cielab.npy"
+        mahal_data_path = "/home/anders/workspace/masters_thesis/Greenwall-Pruning/test_scripts/perception/perception_stats.npy"
+        if not os.path.exists(mahal_data_path):
+            print(f"Error: {mahal_data_path} not found. Please run your training script first.")
+            exit()
+        self.mahal_data = np.load(mahal_data_path, allow_pickle=True).item()
 
         # Subscriber for Color Image
         self.realsense_color_subscriber = self.create_subscription(
@@ -30,19 +52,116 @@ class LeafDetectionNode(Node):
             self.depth_image_callback, 
             10)
 
+
     def color_image_callback(self, msg):
         # 'msg' is a sensor_msgs/Image object
-        self.get_logger().info(f"Received color image: {msg.width}x{msg.height}",
-                               throttle_duration_sec=0.2)
-        # To process this with OpenCV, you'll need cv_bridge later!
+        # self.get_logger().info(f"Received color image: {msg.width}x{msg.height}", throttle_duration_sec=0.2)
+        
+        self.color_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')        
+
 
     def depth_image_callback(self, msg):
         # 'msg' is a sensor_msgs/Image object (often 16-bit integers for depth)
-        self.get_logger().info(f"Received depth image: {msg.width}x{msg.height}",
-                               throttle_duration_sec=0.2)
+        # self.get_logger().info(f"Received depth image: {msg.width}x{msg.height}", throttle_duration_sec=0.2)
         
+        self.depth_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
+        
+
     def leaf_detector(self):
-        print(f"Using {self.device} for leaf detection.")
+        if (self.color_image.size == 0) or (self.depth_image.size == 0):
+            self.get_logger().info("Color or depth image is not ready!")
+            return
+
+        # Check image using fast mahalanobis
+        leaf_coordinate = self.mahalanobis_check()
+
+        if leaf_coordinate is None:
+            print("no leaf coordinate found")
+            return
+
+        self.get_logger().info(f"Found leaf at coordinate: {leaf_coordinate}")
+
+        # If possible leaf found, use SAM2 on point
+        segment_mask = self.run_sam2(leaf_coordinate)
+
+
+    def mahalanobis_check(self) -> np.ndarray|None:
+        class_configs = {
+            "yellow": {
+                "threshold": 20.0,       # Sensitivity: Lower = stricter
+                "kernel_size": (5, 5)   # Morphological cleaning
+            },
+            "brown": {
+                "threshold": 5.0,       # Brown often needs a wider threshold
+                "kernel_size": (5, 5)  # Larger kernel for "crunchy" textures
+            }
+        }
+
+        # Get copy of image
+        img = self.color_image.copy()
+        
+        # Convert to desired color space
+        # img = cv2.cvtColor(img, cv2.COLOR_RGB2Lab).astype(float)
+
+        # Get image information
+        rows, cols, _ = img.shape
+        pixels = img.reshape(-1, 3)
+        combined_morphed = np.zeros((rows, cols), dtype=np.uint8)
+
+        # Created maha masks for each leaf type
+        for i, (cls, config) in enumerate(class_configs.items()):
+            mu = self.mahal_data[cls]["mean"]
+            inv_cov = self.mahal_data[cls]["inv_cov"]
+            
+            diff = pixels - mu
+            dist = np.sum(diff * (diff @ inv_cov), axis=1).reshape(rows, cols)
+            
+            mask = (dist < config["threshold"]).astype(np.uint8) * 255
+            kernel = np.ones(config["kernel_size"], np.uint8)
+            morphed = cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel), cv2.MORPH_CLOSE, kernel)
+            
+            # Combine morphed images
+            combined_morphed = cv2.bitwise_or(combined_morphed, morphed)
+
+            plt.subplot(2, 2, i+1)
+            plt.imshow(morphed, cmap='gray')
+            plt.waitforbuttonpress(timeout=0.01)
+            plt.title(f"Segmentation: {cls.upper()}")
+            plt.axis('off')
+        
+
+        # Find biggest contour
+        contours,_ = cv2.findContours(combined_morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            print("No contours found!")
+            return None
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        # Check if contour is big enough
+        if cv2.contourArea(largest_contour) < self.contour_area_threshold:
+            self.get_logger().info("Mahal found no leaf big enough")
+            return None
+        
+        biggest_leaf_mask = np.zeros_like(combined_morphed)
+        cv2.drawContours(biggest_leaf_mask, [largest_contour], -1, 255, -1)
+
+        plt.subplot(2, 2, 3)
+        plt.imshow(biggest_leaf_mask, cmap='gray')
+        plt.title("biggest_leaf_mask")
+        
+        dist_trans = cv2.distanceTransform(biggest_leaf_mask, cv2.DIST_L2, 5)
+        plt.subplot(2, 2, 4)
+        plt.imshow(dist_trans)
+        plt.title("dist_trans")
+        _, _, _, max_loc = cv2.minMaxLoc(dist_trans)
+        seed_point = np.array([[max_loc[0], max_loc[1]]])
+        print(f"Seed point: {seed_point}")
+
+        return seed_point
+
+
+    def run_sam2(self, leaf_coordinate):
+        pass
 
 
 def main(args=None):
