@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from sensor_msgs.msg import PointCloud2, PointField
+import sensor_msgs_py.point_cloud2 as pc2
+from std_msgs.msg import Header
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image # Import the Image message type
+from sensor_msgs.msg import Image, CameraInfo # Import the Image message type
 from plantwall_custom_interfaces.msg import CdprPose
+from std_srvs.srv import SetBool
 import torch
 import numpy as np
 from cv_bridge import CvBridge
@@ -26,7 +31,18 @@ class LeafDetectionNode(Node):
         self.color_image: np.ndarray = np.zeros(0)
         self.depth_image: np.ndarray = np.zeros(0)
 
-        self.contour_area_threshold = 100 # pixels
+        self.info_received = False
+        self.fx = None
+        self.fy = None
+        self.cx = None
+        self.cy = None
+        self.camera_height = None
+        self.camerea_width = None
+
+        self.leaf_detector_running = False
+
+        self.mahalanobis_contour_area_threshold = 0.001 # ratio of entire image area
+        self.sam2_contour_area_threshold = 0.01 # ratio of entire image area
 
         self.control_loop_period = 0.1 # 10 Hz
         self.control_timer = self.create_timer(self.control_loop_period, self.leaf_detector)
@@ -47,6 +63,8 @@ class LeafDetectionNode(Node):
         sam2_model.load_state_dict(sd, strict=False)
         self.predictor = SAM2ImagePredictor(sam2_model)
 
+        self.pc_publisher = self.create_publisher(PointCloud2, '/leaf_detection/pointcloud', 10)
+
         # Subscriber for Color Image
         self.realsense_color_subscriber = self.create_subscription(
             Image, 
@@ -60,7 +78,19 @@ class LeafDetectionNode(Node):
             '/camera/camera/aligned_depth_to_color/image_raw', 
             self.depth_image_callback, 
             10)
+        
+        # Subscribe to camera intrinsics
+        self.realsense_aligned_intrinsics_subscriber = self.create_subscription(
+            CameraInfo, 
+            '/camera/camera/aligned_depth_to_color/camera_info',
+            self.camera_info_callback, 
+            10)
 
+        self.toggle_service = self.create_service(
+            SetBool, 
+            'toggle_leaf_detection', 
+            self.change_state_service_callback
+        )
 
     def color_image_callback(self, msg):    
         self.color_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')        
@@ -68,9 +98,29 @@ class LeafDetectionNode(Node):
 
     def depth_image_callback(self, msg):
         self.depth_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
-        
+
+    def camera_info_callback(self, msg):
+        if not self.info_received:
+            self.fx = msg.k[0]
+            self.fy = msg.k[4]
+            self.cx = msg.k[2]
+            self.cy = msg.k[5]
+            self.camera_height = msg.height
+            self.camerea_width = msg.width
+            self.info_received = True
+
+    def change_state_service_callback(self, request, response):
+        self.leaf_detector_running = request.data
+        response.success = True
+        status = "ENABLED" if self.leaf_detector_running else "DISABLED"
+        response.message = f"Leaf Detection {status}."
+        self.get_logger().info(response.message)
+        return response
 
     def leaf_detector(self):
+        if not self.leaf_detector_running:
+            return
+        
         if (self.color_image.size == 0) or (self.depth_image.size == 0):
             self.get_logger().info("Color or depth image is not ready!")
             return
@@ -79,30 +129,49 @@ class LeafDetectionNode(Node):
         leaf_coordinate = self.mahalanobis_check()
 
         if leaf_coordinate is None:
-            print("no leaf coordinate found")
+            self.get_logger().info(f"No leaf candidate found by Mahalanobis")
             return
 
         self.get_logger().info(f"Mahalanobis candidate leaf found at coordinate: {leaf_coordinate}")
 
-        # If possible leaf found, use SAM2 on point
-        segment_mask = self.run_sam2(leaf_coordinate)
-
-        # Apply mask on self.color_image for visualization
-        masked_img = cv2.bitwise_and(self.color_image, self.color_image, mask=segment_mask.astype(np.uint8))
-        # # show masked image
-        # plt.imshow(masked_img)
-        # plt.show()
-
+        # If leaf candidate is found, use SAM2 on leaf coordinate
+        sam2_segment_mask = self.run_sam2(leaf_coordinate)
+        if sam2_segment_mask is None:
+            return
         
+        sam2_segment_mask_u8 = (sam2_segment_mask.astype(np.uint8)) * 255
+
+        # Verify Area of sam2 leaf segmentation is large enough
+        sam2_contours,_ = cv2.findContours(sam2_segment_mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not sam2_contours:
+            return
+        sam2_largest_contour = max(sam2_contours, key=cv2.contourArea)
+
+        if cv2.contourArea(sam2_largest_contour) < self.sam2_contour_area_threshold * (sam2_segment_mask_u8.shape[0] * sam2_segment_mask_u8.shape[1]):
+            self.get_logger().info("SAM2 found leaf too small for picking")
+            return
+        
+        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask)
+        # self.save_3d_plot(leaf_pc)
+        self.publish_pointcloud(leaf_pc)
+
+        n_points = len(leaf_pc)
+        self.get_logger().info(f"Generated pointcloud with {n_points} points.")
+
+        # Placeholder: Currently we use point cloud median as grasping point
+        if n_points > 0:
+            grasp_target = np.median(leaf_pc, axis=0)
+            dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
+
 
     def mahalanobis_check(self) -> np.ndarray|None:
         class_configs = {
             "yellow": {
-                "threshold": 20.0,       # Sensitivity: Lower = stricter
+                "threshold": 5.5,       # Sensitivity: Lower = stricter
                 "kernel_size": (5, 5)   # Morphological cleaning
             },
             "brown": {
-                "threshold": 5.0,       # Brown often needs a wider threshold
+                "threshold": 4.0,       # Brown often needs a wider threshold
                 "kernel_size": (5, 5)  # Larger kernel for "crunchy" textures
             }
         }
@@ -133,12 +202,12 @@ class LeafDetectionNode(Node):
         # Find largest contour
         contours,_ = cv2.findContours(combined_morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            print("No contours found!")
+            self.get_logger().info(f"No contours found!")
             return None
         largest_contour = max(contours, key=cv2.contourArea)
 
         # Check if largest contour is big enough
-        if cv2.contourArea(largest_contour) < self.contour_area_threshold:
+        if cv2.contourArea(largest_contour) < self.mahalanobis_contour_area_threshold * (combined_morphed.shape[0] * combined_morphed.shape[1]):
             self.get_logger().info("Mahal found no leaf big enough")
             return None
         
@@ -148,7 +217,7 @@ class LeafDetectionNode(Node):
         dist_trans = cv2.distanceTransform(biggest_leaf_mask, cv2.DIST_L2, 5)
         _, _, _, max_loc = cv2.minMaxLoc(dist_trans)
         seed_point = np.array([[max_loc[0], max_loc[1]]])
-        print(f"Seed point: {seed_point}")
+        self.get_logger().info(f"Seed point: {seed_point}")
 
         return seed_point
 
@@ -164,6 +233,107 @@ class LeafDetectionNode(Node):
         
         best_mask = masks[np.argmax(scores)]
         return best_mask
+    
+    def get_leaf_pointcloud(self, mask):
+        v_coords, u_coords = np.where(mask > 0)
+        
+        z_values = self.depth_image[v_coords, u_coords].astype(float)
+        
+        # Filter out invalid depths and convert to meters
+        valid_indices = z_values > 0
+        u = u_coords[valid_indices]
+        v = v_coords[valid_indices]
+        Z = z_values[valid_indices] / 1000.0
+        
+        # Vectorized Pinhole Projection
+        X = (u - self.cx) * Z / self.fx
+        Y = (v - self.cy) * Z / self.fy
+        
+        # Stack into a (N, 3) array: [[x, y, z], [x, y, z], ...]
+        point_cloud = np.column_stack((X, Y, Z)).astype(np.float32)
+        
+        return point_cloud
+    
+    def transform_cam_to_ee(self, cam_x, cam_y, cam_z):
+        # Mounting Offset (Vector from EE center to Camera Lens)
+        ee_to_cam = np.array([0.05, 0.02, 0.05]) # [x_offset, y_offset, z_offset]
+
+        # Axis Remapping
+        ee_x = -cam_x
+        ee_y = -cam_x
+        ee_z = cam_z
+
+        # Apply transformation
+        delta_x = ee_x + ee_to_cam[0]
+        delta_y = ee_y + ee_to_cam[1]
+        delta_z = ee_z + ee_to_cam[2]
+
+        return (delta_x, delta_y, delta_z)
+
+    def publish_pointcloud(self, pc_array):
+        if pc_array.size == 0:
+            return
+
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = 'camera_color_optical_frame'
+
+        # The PointField MUST match the datatype of the pc_array
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+        ]
+
+        # Use the sensor_msgs_py helper to pack the cloud
+        pc_msg = pc2.create_cloud(header, fields, pc_array)
+        self.pc_publisher.publish(pc_msg)
+
+    def save_3d_plot(self, pc, filename="leaf_plot.png"):
+        """
+        Saves a 3D scatter plot of the leaf pointcloud.
+        pc: np.array of shape (N, 3)
+        """
+        if pc.size == 0:
+            return
+
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Extract X, Y, Z
+        x = pc[:, 0]
+        y = pc[:, 1]
+        z = pc[:, 2]
+
+        # Create Scatter Plot
+        # c=z colors the points by their depth (useful for visual depth perception)
+        img = ax.scatter(x, y, z, c=z, cmap='viridis', s=2)
+        
+        # Add a color bar
+        fig.colorbar(img, ax=ax, label='Depth (m)')
+
+        # Labels (Important for your Thesis figures!)
+        ax.set_xlabel('X (m)')
+        ax.set_ylabel('Y (m)')
+        ax.set_zlabel('Z (m)')
+        ax.set_title('Segmented Leaf 3D Reconstruction')
+
+        # Force the axes to be equal (so the leaf isn't stretched)
+        # This is a common issue in Matplotlib 3D
+        max_range = np.array([x.max()-x.min(), y.max()-y.min(), z.max()-z.min()]).max() / 2.0
+        mid_x = (x.max()+x.min()) * 0.5
+        mid_y = (y.max()+y.min()) * 0.5
+        mid_z = (z.max()+z.min()) * 0.5
+        ax.set_xlim(mid_x - max_range, mid_x + max_range)
+        ax.set_ylim(mid_y - max_range, mid_y + max_range)
+        ax.set_zlim(mid_z - max_range, mid_z + max_range)
+
+        # Save to disk
+        save_path = os.path.join(os.path.expanduser("~"), "Thesis/plots", filename)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path)
+        plt.close(fig) # Close to free up memory
+        self.get_logger().info(f"3D Plot saved to {save_path}")
 
 def main(args=None):
     rclpy.init(args=args)
