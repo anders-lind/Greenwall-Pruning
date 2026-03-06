@@ -16,36 +16,34 @@ class CDPRPathplannerNode(Node):
         self.end_effector_height = 0.03916
         self.end_effector_width = 0.09322
 
-        CDPR_width = 0.908
-        CDPR_height = 0.944
-        self.initial_pos = np.array([CDPR_width/2, 0.52-0.03])
+        self.CDPR_height = 0.944
+        self.CDPR_width = 0.908
+        
+        self.initial_pos = np.array([self.CDPR_width/2, 0.52-0.03])
         self.clear_homing_stick = self.initial_pos + np.array([0.0, 0.05])
-        self.center_pos = np.array([CDPR_width/2, CDPR_height/2])
+        self.center_pos = np.array([self.CDPR_width/2, self.CDPR_height/2])
         self.current_target_idx = 0
         self.smoothing_radius = 0.005 # 0.5 cm
 
-        self.CDPR_height = 0.944
-        self.CDPR_width = 0.908
-
-        # Square path around the initial pose
+        ## Square path around the initial pose ##
         # self.square_poses = [
-        #     self.initial_pose + np.array([0.00, 0.05]), # 5 cm up
-        #     self.initial_pose + np.array([0.05, 0.05]), # 5 cm up and 5 cm right
-        #     self.initial_pose + np.array([0.05, -0.05]), # 5 cm right and 5 cm down
-        #     self.initial_pose + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
-        #     self.initial_pose + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
-        #     self.initial_pose + np.array([0.0, 0.05]), # 5 cm up
-        #     self.initial_pose + np.array([0.0, 0.0]) # back to initial pose
+        #     self.initial_pos + np.array([0.00, 0.05]), # 5 cm up
+        #     self.initial_pos + np.array([0.05, 0.05]), # 5 cm up and 5 cm right
+        #     self.initial_pos + np.array([0.05, -0.05]), # 5 cm right and 5 cm down
+        #     self.initial_pos + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
+        #     self.initial_pos + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
+        #     self.initial_pos + np.array([0.0, 0.05]), # 5 cm up
+        #     self.initial_pos + np.array([0.0, 0.0]) # back to initial pose
         # ]
 
-        # Workspace test poses
+        ## Workspace test poses ##
+        self.pos = [np.array([self.CDPR_width/2, self.CDPR_height])] # top
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])] # bottom right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, 0.0])] # bottom left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
-
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
-        self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
+        # self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_height])] # top side
 
@@ -55,6 +53,7 @@ class CDPRPathplannerNode(Node):
         self.goto_pose_publisher = self.create_publisher(CdprPose, '/cdpr/goto_pose', 10)
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
         self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_from_poselist)
+        print(f"First point is {self.pos}")
 
         self.get_logger().info("CDPR Pathplanner Node has been started")
 
@@ -74,7 +73,9 @@ class CDPRPathplannerNode(Node):
         # Go to towards next point until within smoothing radius, then switch to next point
         if np.linalg.norm(self.current_pose[0:2] -self.pos[self.current_target_idx]) < self.smoothing_radius:
             self.current_target_idx = self.current_target_idx + 1
+            print("Next pos")
             if self.current_target_idx >= len(self.pos):
+                print("Trajectory completed")
                 return
         
         orientation = 0.0
@@ -131,22 +132,19 @@ class CDPRPathplannerNode(Node):
             return
 
         # Circle parameters
-        circle_radius = 0.1 # 5 cm
+        circle_radius = 0.1 # m
         circle_discretization = 20
         angle_step = 2 * np.pi / circle_discretization
         
-        # 1. Determine the ACTIVE target pose BEFORE checking distance
-        # FIX: Changed >= to > so it includes index 20 (which is 360 degrees, closing the loop)
+        # Check if circle trajectory is complete
         if self.current_target_idx > circle_discretization:
-            # Trajectory complete: return to center
             target_pose = self.initial_pos
         else:
-            # Calculate the specific point on the circle for the current index
-            # FIX: Added np.pi/2 to start at the TOP of the circle [0, r]
+            # Calculate the specific point on the circle for the current index, starting from the top
             current_angle = (angle_step * self.current_target_idx) + (np.pi / 2)
             target_pose = self.initial_pos + np.array([np.cos(current_angle), np.sin(current_angle)]) * circle_radius
 
-        # 2. Check distance to the ACTIVE target pose
+        # Check distance to the ACTIVE target pose
         if self.current_target_idx <= circle_discretization:
             distance_to_target = np.linalg.norm(self.current_pose[0:2] - target_pose)
             

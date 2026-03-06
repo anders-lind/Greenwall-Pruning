@@ -180,7 +180,7 @@ class CDPRBaseControlNode(Node):
 
             return
 
-    def is_tensions_within_tolerence(self):
+    def tension_safety_check(self):
         current_forces = self.motor_current_units_to_force(self.get_present_current())
         if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
             self.motors.disable_torque(motors=[1,2,3,4])
