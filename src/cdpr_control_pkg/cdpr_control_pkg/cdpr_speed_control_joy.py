@@ -63,7 +63,7 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         velocity_int_list = [int(v) for v in desired_motor_units]
 
         # Tension safety check
-        if not self.is_tensions_within_tolerence():
+        if not self.tension_safety_check():
             return
 
         # Prints

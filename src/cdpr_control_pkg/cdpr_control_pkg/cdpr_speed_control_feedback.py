@@ -93,17 +93,17 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         
 
         # Tension safety check
-        if not self.is_tensions_within_tolerence():
+        if not self.tension_safety_check():
             return
 
 
 
         # Prints
-        self.get_logger().info(
-            f"current_forces: ["
-            f"{current_forces[0]:.2f}, {current_forces[1]:.2f}, {current_forces[2]:.2f}, {current_forces[3]:.2f}]",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"current_forces: ["
+        #     f"{current_forces[0]:.2f}, {current_forces[1]:.2f}, {current_forces[2]:.2f}, {current_forces[3]:.2f}]",
+        #     throttle_duration_sec=0.2
+        # )
         self.get_logger().info(
             f"self.pose: ["
             f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
