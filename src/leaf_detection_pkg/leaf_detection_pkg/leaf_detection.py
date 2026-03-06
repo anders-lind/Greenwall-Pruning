@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import matplotlib.pyplot as plt
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image # Import the Image message type
@@ -7,7 +8,6 @@ from plantwall_custom_interfaces.msg import CdprPose
 import torch
 import numpy as np
 from cv_bridge import CvBridge
-import matplotlib.pyplot as plt
 import os
 import cv2
 

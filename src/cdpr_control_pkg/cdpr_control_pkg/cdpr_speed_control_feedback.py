@@ -43,7 +43,10 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         
         # Scale delta ori
         if abs(delta_ori) < self.stopping_rot:
-            delta_ori = 0.0
+            delta_ori_scaled = 0.0
+        else:
+            delta_ori_scaled = np.sign(delta_ori)
+
 
         # Pose estimation with integration
         # self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
@@ -56,7 +59,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
 
         # Calculate ideal cable lengths for NEXT pose
         next_pos = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
-        next_ori = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
+        next_ori = self.pose[2] + delta_ori_scaled * self.rotation_speed * self.control_loop_period
         
         desired_cable_vectors = self.inverse_kinematics(next_pos, next_ori)
         desired_cable_lengths = np.array([np.linalg.norm(l) for l in desired_cable_vectors])

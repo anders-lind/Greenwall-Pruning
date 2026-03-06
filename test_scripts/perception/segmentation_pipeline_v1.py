@@ -16,9 +16,10 @@ class_configs = {
 
 # --- STEP 2: INITIALIZATION ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
-home = os.path.expanduser("~")
+path_to_sam2 = os.path.expanduser("~/Thesis/sam2") # Alex
+path_to_sam2 = os.path.expanduser("~/workspace/masters_thesis/sam2") # Anders
 stats_path = "perception_stats_cielab.npy"
-sam2_checkpoint = os.path.join(home, "Thesis/sam2/checkpoints/sam2.1_hiera_base_plus.pt")
+sam2_checkpoint = os.path.join(path_to_sam2, "checkpoints/sam2.1_hiera_base_plus.pt")
 model_cfg = "sam2_hiera_b+.yaml"
 
 training_stats = np.load(stats_path, allow_pickle=True).item()
@@ -30,12 +31,12 @@ sam2_model.load_state_dict(sd, strict=False)
 predictor = SAM2ImagePredictor(sam2_model)
 
 # --- STEP 3: IMAGE LOADING ---
-test_file = "training_data/4_Color.png"
+test_file = "training_data/2_Color.png"
 img_bgr = cv2.imread(test_file)
 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 img_lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2Lab).astype(float)
 rows, cols, _ = img_lab.shape
-pixels_lab = img_lab.reshape(-1, 3)
+pixels_lab = img_lab.reshape(-1, 3) 
 
 # --- STEP 4: PERCEPTION PIPELINE (Independent Streams) ---
 class_data = {}
@@ -132,40 +133,41 @@ else:
 # --- STEP 6: 8-PANEL PLOTTING ---
 fig, axes = plt.subplots(2, 4, figsize=(20, 10))
 axes = axes.ravel()
+fontsize = 20
 
 # Panel 1: Input
 axes[0].imshow(img_rgb)
-axes[0].set_title("1. Input Image")
+axes[0].set_title("1. Input Image", fontsize=fontsize)
 
 # Panel 2: Yellow Raw Mask
 axes[1].imshow(class_data["yellow"]["binary"], cmap='gray')
-axes[1].set_title("2. Yellow Mahal. Mask")
+axes[1].set_title("2. Yellow Mahal. Mask", fontsize=fontsize)
 
 # Panel 3: Brown Raw Mask
 axes[2].imshow(class_data["brown"]["binary"], cmap='gray')
-axes[2].set_title("3. Brown Mahal. Mask")
+axes[2].set_title("3. Brown Mahal. Mask", fontsize=fontsize)
 
 # Panel 4: Yellow Morph Mask
 axes[3].imshow(class_data["yellow"]["morphed"], cmap='gray')
-axes[3].set_title("4. Yellow Morph Ops")
+axes[3].set_title("4. Yellow Morph Ops", fontsize=fontsize)
 
 # Panel 5: Brown Morph Mask
 axes[4].imshow(class_data["brown"]["morphed"], cmap='gray')
-axes[4].set_title("5. Brown Morph Ops")
+axes[4].set_title("5. Brown Morph Ops", fontsize=fontsize)
 
 # Panel 6: Combined Cleaned
 axes[5].imshow(combined_morphed, cmap='gray')
-axes[5].scatter(max_loc[0], max_loc[1], c='lime', marker='x', s=150)
-axes[5].set_title("6. Combined Cleaned Mask")
+axes[5].scatter(max_loc[0], max_loc[1], c='red', marker='x', s=200)
+axes[5].set_title("6. Combined Cleaned Mask", fontsize=fontsize)
 
 # Panel 7: Distance Transform
 axes[6].imshow(dist_trans, cmap='magma')
-axes[6].set_title("7. Distance Transform")
+axes[6].set_title("7. Distance Transform", fontsize=fontsize)
 
 # Panel 8: SAM2 Output
 final_view = cv2.bitwise_and(img_rgb, img_rgb, mask=best_mask.astype(np.uint8))
 axes[7].imshow(final_view)
-axes[7].set_title("8. SAM2 Prediction")
+axes[7].set_title("8. SAM2 Prediction", fontsize=fontsize)
 
 for ax in axes: ax.axis('off')
 plt.tight_layout()
