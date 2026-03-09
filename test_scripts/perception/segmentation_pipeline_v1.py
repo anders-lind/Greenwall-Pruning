@@ -17,7 +17,7 @@ class_configs = {
 # --- STEP 2: INITIALIZATION ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
 path_to_sam2 = os.path.expanduser("~/Thesis/sam2") # Alex
-path_to_sam2 = os.path.expanduser("~/workspace/masters_thesis/sam2") # Anders
+# path_to_sam2 = os.path.expanduser("~/workspace/masters_thesis/sam2") # Anders
 stats_path = "perception_stats_cielab.npy"
 sam2_checkpoint = os.path.join(path_to_sam2, "checkpoints/sam2.1_hiera_base_plus.pt")
 model_cfg = "sam2_hiera_b+.yaml"

@@ -10,8 +10,8 @@ from sam2.build_sam import build_sam2
 from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
 
 # --- STEP 1: TRAINING (Mahalanobis - Setup Cost) ---
-img_train = cv2.imread("training_data/4_Color.png")
-img_annot = cv2.imread("training_data/4_seg_yellow.png")
+img_train = cv2.imread("training_data/2_Color.png")
+img_annot = cv2.imread("training_data/2_seg_yellow.png")
 
 if img_train is None or img_annot is None:
     print("Error: Training images not found. Check your paths!")
@@ -24,7 +24,7 @@ mean = np.average(annot_pix_values, axis=0)
 inv_cov = np.linalg.inv(np.cov(annot_pix_values.transpose()) + np.eye(3) * 1e-6)
 
 # --- STEP 2: LOAD TEST IMAGE ---
-test_file = "training_data/1_Color.png"
+test_file = "training_data/2_Color.png"
 img_test = cv2.imread(test_file)
 if img_test is None:
     print(f"Error: Could not load {test_file}")
@@ -114,7 +114,7 @@ print(f"{'='*30}\n")
 # --- STEP 5: VISUALIZATION ---
 plt.figure(figsize=(18, 6))
 plt.subplot(1, 3, 1)
-plt.title(f"Target Selection\nTotal Time: {t_total/1000:.2f}s")
+plt.title(f"Target Selection")
 plt.imshow(img_test_rgb)
 if candidates:
     x, y, w, h = winner['bbox']
@@ -122,7 +122,7 @@ if candidates:
 plt.axis('off')
 
 plt.subplot(1, 3, 2)
-plt.title(f"SAM 2 Proposals ({len(all_masks)})")
+plt.title(f"SAM 2 Segmentations ({len(all_masks)})\nTotal Time: {t_total/1000:.2f}s")
 plt.imshow(cv2.addWeighted(img_test_rgb, 0.4, proposal_overlay, 0.6, 0))
 plt.axis('off')
 

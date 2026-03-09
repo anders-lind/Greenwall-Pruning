@@ -29,7 +29,7 @@ predictor = SAM2ImagePredictor(sam2_model)
 stats_path = "perception_stats_cielab.npy"
 training_stats = np.load(stats_path, allow_pickle=True).item()
 
-test_file = "training_data/5_Color.png"
+test_file = "training_data/2_Color.png"
 img_bgr = cv2.imread(test_file)
 img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 img_lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2Lab).astype(float)

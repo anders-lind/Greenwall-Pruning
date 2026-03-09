@@ -39,5 +39,5 @@ def plot_histograms(image_path):
     plt.tight_layout()
     plt.show()
 
-# Change this to your image path
+# Change this to image path
 plot_histograms("/home/alex/4_Color.png")
