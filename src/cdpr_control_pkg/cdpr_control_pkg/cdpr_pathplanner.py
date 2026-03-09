@@ -43,7 +43,7 @@ class CDPRPathplannerNode(Node):
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, 0.0])] # bottom left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
-        # self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
+        #self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_height])] # top side
 

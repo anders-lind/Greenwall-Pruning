@@ -26,7 +26,7 @@ class CDPRBaseControlNode(Node):
 
         # Homing parameters
         self.homing_speed = int(30) # Motor units [0.229 RPM]
-        self.home_tension = 5 # Newton
+        self.home_tension = 3 # Newton
         self.force_tension_time = 0.1 # S
         self.homing_loop_period = self.control_loop_period
 
@@ -37,6 +37,14 @@ class CDPRBaseControlNode(Node):
         # CDPR parameters
         self.spool_radius = 0.0115 - 0.001 # spool outer radius minus cable radius
         self.spool_circumference = 2 * self.spool_radius * np.pi
+        self.spool_pitch = 0.003
+        self.cable_length_per_rot = np.sqrt(self.spool_circumference**2 + self.spool_pitch**2) # helix length
+        self.effective_circumferences = np.array([
+            self.cable_length_per_rot - self.spool_pitch, # Motor 1 (Top Left)
+            self.cable_length_per_rot - self.spool_pitch, # Motor 2 (Top Right)
+            self.cable_length_per_rot + self.spool_pitch, # Motor 3 (Bottom Right)
+            self.cable_length_per_rot + self.spool_pitch  # Motor 4 (Bottom Left)
+        ])
         
         self.CDPR_height = 0.944
         self.CDPR_width = 0.908
@@ -61,7 +69,7 @@ class CDPRBaseControlNode(Node):
         self.stopping_rot = 1e-3 # rad
 
         # Motor encoder filter variables
-        self.filter_alpha = 0.7 # Smoothing factor for encoders
+        self.filter_alpha = 1.0 # Smoothing factor for encoders
         self.motor_feedback_period = 0.01 # 100 Hz
         
         # State variables
@@ -91,7 +99,7 @@ class CDPRBaseControlNode(Node):
         self.control_timer = self.create_timer(self.control_loop_period, self.command_robot)
         self.control_timer.cancel()
         self.homing_timer = self.create_timer(self.homing_loop_period, self.homing)
-        self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.motor_feedback)
+        self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.filtered_cable_lengths)
 
         self.get_logger().info(f"{node_name} Node has been started.")
     
@@ -183,7 +191,12 @@ class CDPRBaseControlNode(Node):
     def tension_safety_check(self):
         current_forces = self.motor_current_units_to_force(self.get_present_current())
         if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
-            self.motors.disable_torque(motors=[1,2,3,4])
+            # self.motors.disable_torque(motors=[1,2,3,4])
+            self.motors.write(
+                motors=[1,2,3,4],
+                control_type=CONTROL_TABLE.GOAL_VELOCITY,
+                values=[0,0,0,0]
+            )
             self.control_timer.cancel()
             self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
             return False
@@ -207,7 +220,7 @@ class CDPRBaseControlNode(Node):
             self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
             return
 
-    def motor_feedback(self):   
+    def filtered_cable_lengths(self):   
         raw_lengths = self.get_current_cable_lengths()
         
         if np.any(raw_lengths == None):
@@ -220,15 +233,17 @@ class CDPRBaseControlNode(Node):
         )
 
     def get_current_cable_lengths(self):
-        positions_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
-        positions_list = np.array(positions_list)
+        positions = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        positions = np.array(positions)
 
-        if np.any(positions_list == None):
+        if np.any(positions == None):
             return np.array([None, None, None, None])
         
-        motor_encoder_positions = positions_list - self.zero_offsets
+        motor_encoder_positions = positions - self.zero_offsets
         motor_encoder_rotations = motor_encoder_positions / 4096
-        current_cable_lengths = self.initial_cable_lengths - motor_encoder_rotations * self.get_spool_circumference()
+        current_cable_lengths = self.initial_cable_lengths - motor_encoder_rotations * self.cable_length_per_rot
+        current_cable_lengths[0:2] = current_cable_lengths[0:2] + motor_encoder_rotations[0:2] * self.spool_pitch # Negative correction for winch box vertical travel
+        current_cable_lengths[2:4] = current_cable_lengths[2:4] - motor_encoder_rotations[2:4] * self.spool_pitch # Positive corrention for winch box vertical travel
         return current_cable_lengths
 
     def get_present_current(self):
@@ -240,9 +255,6 @@ class CDPRBaseControlNode(Node):
             print("ERROR: Could not read currents!")
 
         return currents_list
-
-    def get_spool_circumference(self):
-        return self.spool_circumference
 
     def force_to_current(self, force_vector):
         torque_vector = force_vector * self.spool_radius

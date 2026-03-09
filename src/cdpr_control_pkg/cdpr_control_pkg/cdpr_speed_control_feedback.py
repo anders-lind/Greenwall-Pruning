@@ -79,7 +79,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         desired_cable_velocities = ff_velocities# + fb_velocities
 
         # Convert to RPM and Motor Units
-        desired_spool_rpm = (desired_cable_velocities / self.spool_circumference) * 60 
+        desired_spool_rpm = (desired_cable_velocities / self.effective_circumferences) * 60 
         desired_motor_units = desired_spool_rpm / 0.229 
         velocity_int_list = [int(v) for v in desired_motor_units]
 
