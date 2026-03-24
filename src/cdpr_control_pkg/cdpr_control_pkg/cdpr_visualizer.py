@@ -20,6 +20,7 @@ class CDPRVisualizer(Node):
         self.end_effector_width = 0.09322
         
         self.pose_subscriber = self.create_subscription(msg_type=CdprPose, topic='/cdpr/current_pose', callback=self.updatePose, qos_profile=0)
+        self.goto_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/goto_pose', self.goto_pose_callback, 10)
         self.visualize_timer = self.create_timer(timer_period_sec=0.1, callback=self.updateVisualization)
 
         w = self.CDPR_width
@@ -58,14 +59,24 @@ class CDPRVisualizer(Node):
         )
         self.ax.add_patch(self.ee_patch)
 
+        # Initialize the target end effector (green, lower zorder)
+        self.target_ee_patch = patches.Polygon(
+            np.zeros((4, 2)), closed=True, facecolor='green', edgecolor='black', zorder=1
+        )
+        self.ax.add_patch(self.target_ee_patch)
+
         # Initialize 4 cables (red lines)
         self.cables = [self.ax.plot([], [], 'r-', linewidth=1.5, zorder=2)[0] for _ in range(4)]
 
 
     def updatePose(self, msg: CdprPose):
-        print("Received pose: ", np.array([msg.position[0], msg.position[1], msg.orientation]))
         self.cdpr_pose = [msg.position[0], msg.position[1], msg.orientation]
     
+
+    def goto_pose_callback(self, msg: CdprPose):
+        target_pos = msg.position
+        target_ori = msg.orientation
+        self.target_pose = np.array([target_pos[0], target_pos[1], target_ori])
 
     def updateVisualization(self):
         """Updates the visualizer with the current self.cdpr_pose."""
@@ -75,7 +86,13 @@ class CDPRVisualizer(Node):
         ee_corners = self._get_end_effector_corners(x, y, theta)
         self.ee_patch.set_xy(ee_corners)
 
-        # 2. Update Cable Lines
+        # 2. Update Target End Effector if available
+        if hasattr(self, 'target_pose'):
+            tx, ty, ttheta = self.target_pose
+            target_corners = self._get_end_effector_corners(tx, ty, ttheta)
+            self.target_ee_patch.set_xy(target_corners)
+
+        # 3. Update Cable Lines
         for i in range(4):
             # Connect anchor 'i' to end-effector corner 'i'
             self.cables[i].set_data(
@@ -83,7 +100,7 @@ class CDPRVisualizer(Node):
                 [self.anchors[i, 1], ee_corners[i, 1]]
             )
 
-        # 3. Draw the canvas
+        # 4. Draw the canvas
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
     

@@ -10,6 +10,7 @@ from plantwall_custom_interfaces.msg import CdprPose
 class CDPRPathplannerNode(Node):
     def __init__(self):
         super().__init__('cdpr_pathplanner')
+        self.get_logger().info("CDPR Pathplanner Node has been started")
 
         self.current_pose = None
 
@@ -33,19 +34,21 @@ class CDPRPathplannerNode(Node):
         #     self.initial_pos + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
         #     self.initial_pos + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
         #     self.initial_pos + np.array([0.0, 0.05]), # 5 cm up
-        #     self.initial_pos + np.array([0.0, 0.0]) # back to initial pose
+        #     self.initial_pos + np.array(-0.00995311  0.99995047[0.0, 0.0]) # back to initial pose
         # ]
 
         ## Workspace test poses ##
-        self.pos = [np.array([self.CDPR_width/2, self.CDPR_height])] # top
+        self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])]
+        # self.pos = [np.array([self.CDPR_width/2, self.CDPR_height])] # top
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])] # bottom right corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, 0.0])] # bottom left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
-        #self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
+        # self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
+        # self.pos = [self.clear_homing_stick, np.array([self.CDPR_width/2, 0.0])] # bottom side no extra stops
         # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_height])] # top side
+        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_heignp.array([self.CDPR_width, self.CDPR_height/2])ht])] # top side
 
         self.pathplanner_loop_period = 0.02
 
@@ -53,9 +56,9 @@ class CDPRPathplannerNode(Node):
         self.goto_pose_publisher = self.create_publisher(CdprPose, '/cdpr/goto_pose', 10)
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
         self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_from_poselist)
-        print(f"First point is {self.pos}")
-
-        self.get_logger().info("CDPR Pathplanner Node has been started")
+        
+        print(f"Full path is: {self.pos}")
+        print(f"First point is: {self.pos[0]}")
 
     def current_pose_callback(self, msg: CdprPose):
         current_pos = msg.position
@@ -73,7 +76,7 @@ class CDPRPathplannerNode(Node):
         # Go to towards next point until within smoothing radius, then switch to next point
         if np.linalg.norm(self.current_pose[0:2] -self.pos[self.current_target_idx]) < self.smoothing_radius:
             self.current_target_idx = self.current_target_idx + 1
-            print("Next pos")
+            print(f"Next pose: {self.pos[self.current_target_idx]}")
             if self.current_target_idx >= len(self.pos):
                 print("Trajectory completed")
                 return
@@ -93,39 +96,6 @@ class CDPRPathplannerNode(Node):
         goto_pose_msg.position = self.pos[self.current_target_idx].tolist()
         goto_pose_msg.orientation = orientation
         self.goto_pose_publisher.publish(goto_pose_msg)
-
-    # def pathplanner_online_circle(self):
-    #     goto_pose_msg = CdprPose()
-    #     if self.current_pose is None:
-    #         return
-
-    #     # Circle path around the initial pose
-    #     circle_radius = 0.05 # 5 cm
-    #     circle_discretization = 20
-    #     angle_step = 2 * np.pi / circle_discretization
-        
-    #     if self.current_target_idx >= circle_discretization:
-    #         target_pose = self.initial_pose
-    #         return
-
-
-    #     target_pose = self.initial_pose + np.array([0, circle_radius])
-    #     # Compute next target point on the circle when current_pose is within the smoothing radius
-    #     if np.linalg.norm(self.current_pose[0:2] - target_pose) < self.smoothing_radius:
-    #         self.get_logger().info(f"Reached target point {self.current_target_idx}, moving to next target")
-    #         self.current_target_idx += 1
-    #         if self.current_target_idx >= circle_discretization:
-    #             target_pose = self.initial_pose
-    #             return
-            
-    #     if self.current_target_idx > 0:
-    #         current_angle = angle_step * self.current_target_idx
-    #         target_pose = self.initial_pose + np.array([np.cos(current_angle),np.sin(current_angle)]) * circle_radius
-
-    #     goto_pose_msg.position = target_pose.tolist()
-    #     goto_pose_msg.orientation = 0.0
-
-    #     self.goto_pose_publisher.publish(goto_pose_msg)
 
     def pathplanner_online_circle(self):
         if self.current_pose is None:
@@ -149,7 +119,7 @@ class CDPRPathplannerNode(Node):
             distance_to_target = np.linalg.norm(self.current_pose[0:2] - target_pose)
             
             if distance_to_target < self.smoothing_radius:
-                self.get_logger().info(f"Reached target point {self.current_target_idx}, moving to next target")
+                self.get_logger().info(f"Reached target point {target_pose:.2f} ({self.current_target_idx} of {circle_discretization}). Moving to next target")
                 self.current_target_idx += 1
                 
                 # 3. Update target_pose immediately for the current frame

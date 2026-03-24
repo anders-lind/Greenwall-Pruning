@@ -10,6 +10,7 @@ from plantwall_custom_interfaces.msg import CdprPose
 import scipy
 import matplotlib.pyplot as plt
 import time
+import sys
 
 
 class CDPRBaseControlNode(Node):
@@ -26,7 +27,7 @@ class CDPRBaseControlNode(Node):
 
         # Homing parameters
         self.homing_speed = int(30) # Motor units [0.229 RPM]
-        self.home_tension = 3 # Newton
+        self.home_tension = 5 # Newton
         self.force_tension_time = 0.1 # S
         self.homing_loop_period = self.control_loop_period
 
@@ -101,10 +102,18 @@ class CDPRBaseControlNode(Node):
         self.homing_timer = self.create_timer(self.homing_loop_period, self.homing)
         self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.filtered_cable_lengths)
 
+        # Crash behavior
+        sys.excepthook = self.myexcepthook
+
         self.get_logger().info(f"{node_name} Node has been started.")
     
     def __del__(self):
         print("CDPRBaseControlNode destructor")
+    
+    def myexcepthook(self, type, value, tb):
+        print("CRASH BEHAVIOR BEGUN")
+        self.motors.disable_torque([1,2,3,4])
+        print("CRASH BEHAVIOR DONE")
 
     def initialize_state(self):
         # Assume robot starts at center or user manually centered it
@@ -191,7 +200,7 @@ class CDPRBaseControlNode(Node):
     def tension_safety_check(self):
         current_forces = self.motor_current_units_to_force(self.get_present_current())
         if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
-            # self.motors.disable_torque(motors=[1,2,3,4])
+            self.motors.disable_torque(motors=[1,2,3,4])
             self.motors.write(
                 motors=[1,2,3,4],
                 control_type=CONTROL_TABLE.GOAL_VELOCITY,
@@ -406,7 +415,7 @@ class CDPRBaseControlNode(Node):
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
             # Start homing procedure (only when cdpr control loop is inactive)
             if self.control_timer.is_canceled():
-                self.homing_active = True   
+                self.homing_active = True
                 self.get_logger().info('Homing started.')
 
         # Button LB (rising edge)
@@ -443,49 +452,3 @@ class CDPRBaseControlNode(Node):
             line, = self.ax.plot([], [], color=colors[i], linewidth=1)
             self.cable_lines.append(line)
         plt.legend(loc='upper right')
-    
-    def visualisation(self):
-        x, y, theta = self.pose
-        theta_deg = np.degrees(theta)
-        
-        # 2. Update Text
-        status_str = (
-            f"X: {x:.4f} m\n"
-            f"Y: {y:.4f} m\n"
-            f"Θ: {theta:.4f} rad ({theta_deg:.1f}°)\n"
-            f"T_min: {1.0} N" # Or whatever variable you use
-        )
-        self.pose_text.set_text(status_str)
-        R = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
-        qs = [self.q1, self.q2, self.q3, self.q4]
-        corners_world = []
-        for q_local in qs:
-            q_rotated = R @ q_local
-            corner_world = np.array([x, y]) + q_rotated
-            corners_world.append(corner_world)
-        ee_x = [c[0] for c in corners_world] + [corners_world[0][0]]
-        ee_y = [c[1] for c in corners_world] + [corners_world[0][1]]
-        self.ee_line.set_data(ee_x, ee_y)
-        self.center_dot.set_data([x], [y])
-        Bs = [self.B1, self.B2, self.B3, self.B4]
-        for i in range(4):
-            self.cable_lines[i].set_data([Bs[i][0], corners_world[i][0]], [Bs[i][1], corners_world[i][1]])
-
-        if hasattr(self, 'corner_labels'):
-            for t in self.corner_labels: t.remove()
-        self.corner_labels = []
-
-        # ADD new text labels "1", "2", "3", "4" at the cable attachment points
-        for i in range(4):
-            # corner_world[i] is the [x,y] of the attachment point on the body
-            lbl = self.ax.text(corners_world[i][0], corners_world[i][1], f"{i+1}", 
-                               color='red', fontsize=12, fontweight='bold')
-            self.corner_labels.append(lbl)
-            
-            # Also label the Anchors (B1..B4)
-            lbl_b = self.ax.text(Bs[i][0], Bs[i][1], f"B{i+1}", 
-                                 color='blue', fontsize=10)
-            self.corner_labels.append(lbl_b)
-
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
