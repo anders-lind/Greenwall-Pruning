@@ -79,14 +79,7 @@ class DynamixelSyncDummy:
 
 
     def motor_name_to_motor_id(self, motor_num: int) -> int:
-        if motor_num == 1:
-            return 1
-        if motor_num == 2:
-            return 2
-        if motor_num == 3:
-            return 3
-        if motor_num == 4:
-            return 4
+        return motor_num
         
         print("ERROR: Motor number has no accociated ID")
         raise ValueError

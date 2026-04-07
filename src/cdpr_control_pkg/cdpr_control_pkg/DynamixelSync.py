@@ -15,6 +15,9 @@ class CONTROL_TABLE(Enum):
     LED = (65, 1, False)
     GOAL_CURRENT = (102, 2, True)
     GOAL_VELOCITY = (104, 4, True)
+    PROFILE_ACCELERATION = (108, 4, False)
+    PROFILE_VELOCITY = (112, 4, False)
+    GOAL_POSITION = (116, 4, True)
     PRESENT_CURRENT = (126, 2, True)
     PRESENT_VELOCITY = (128, 4, True)
     PRESENT_POSITION = (132, 4, True)
@@ -159,14 +162,7 @@ class DynamixelSync:
 
 
     def motor_name_to_motor_id(self, motor_num: int) -> int:
-        if motor_num == 1:
-            return 1
-        if motor_num == 2:
-            return 2
-        if motor_num == 3:
-            return 3
-        if motor_num == 4:
-            return 4
+        return motor_num
         
         print("ERROR: Motor number has no accociated ID")
         raise ValueError
