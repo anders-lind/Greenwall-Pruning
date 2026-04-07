@@ -43,7 +43,6 @@ class CDPRForceControlNode(CDPRBaseControlNode):
         self.motors.disable_torque(motors=[1,2,3,4])
         self.motors.write(motors=[1,2,3,4], values=OPERATING_MODES.CURRENT_CONTROL_MODE, control_type=CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(motors=[1,2,3,4])
-        self.old_goal = None
 
         # CSV logging setup
         self.start_time = time.time()
@@ -91,20 +90,13 @@ class CDPRForceControlNode(CDPRBaseControlNode):
         clamped_th = np.clip(raw_pose[2], -0.3, 0.3) 
         self.pose = np.array([clamped_x, clamped_y, clamped_th])
 
-        # Calculate velocity
-        velocity = (self.previous_pose - self.pose) / self.control_loop_period
-        self.previous_pose = self.pose
-
-        # Calculate Damping Force
-        u_damping = -self.Kd * velocity
-
         # Total Virtual Wrench
         u_total = np.array([0,0,0])
         goal_pose = None
         delta_pos_unit = np.array([0, 0])
         if (self.USE_JOY):
             u_joystick = self.joystick_sensitivity * self.input
-            u_total = u_joystick #+ u_damping
+            u_total = u_joystick
         if (self.USE_PATHPLANNER):
             goal_pose = self.target_pose.copy()
             delta_pose = goal_pose - self.pose
@@ -142,6 +134,7 @@ class CDPRForceControlNode(CDPRBaseControlNode):
             T_final = T_move + lambda_optimal * S_nullspace
         else:
             T_final = np.maximum(T_move, self.t_min)
+            print("WARNING: Not valid null space, using special case!")
 
         # Tension safety check
         if not self.tension_safety_check():
@@ -187,9 +180,6 @@ class CDPRForceControlNode(CDPRBaseControlNode):
             self.log_file.flush()
         except Exception as e:
             self.get_logger().error(f"Failed to log CSV row: {e}")
-
-        self.old_goal = self.target_pose.copy() if self.USE_PATHPLANNER else self.old_goal
-
 
 
 
