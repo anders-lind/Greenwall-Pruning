@@ -12,6 +12,9 @@ find_package(rosidl_default_generators REQUIRED)
 # Generate the interface
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CdprPose.msg"
+  "srv/CdprPose.srv"
+  "srv/CdprPos3D.srv"
+  "srv/Float64.srv"
 )
 
 if(BUILD_TESTING)
