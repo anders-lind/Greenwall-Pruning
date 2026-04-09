@@ -88,7 +88,7 @@ class LeafDetectionNode(Node):
 
         self.toggle_service = self.create_service(
             SetBool, 
-            'toggle_leaf_detection', 
+            '/leaf_detection/toggle', 
             self.change_state_service_callback
         )
 

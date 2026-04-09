@@ -5,6 +5,9 @@ import numpy as np
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from plantwall_custom_interfaces.msg import CdprPose
+from plantwall_custom_interfaces.srv import CdprPose as CdprPoseSrv
+from std_srvs.srv import SetBool
+import time
 
 
 class CDPRPathplannerNode(Node):
@@ -57,8 +60,28 @@ class CDPRPathplannerNode(Node):
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
         self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_from_poselist)
         
+        # Service servers
+        self.toggle_search_state_srv = self.create_service(SetBool, '/cdpr_pathplanner/toggle_search_state', self.toggle_search_state_callback)
+        self.goto_pose_srv = self.create_service(CdprPoseSrv, '/cdpr_pathplanner/goto_pose', self.goto_pose_callback)
+
         print(f"Full path is: {self.pos}")
         print(f"First point is: {self.pos[0]}")
+
+    def toggle_search_state_callback(self, request, response):
+        if request.data:
+            self.get_logger().info("Toggling pathplanner search state to ACTIVE.")
+        else:
+            self.get_logger().info("Toggling pathplanner search state to INACTIVE.")
+        return response
+    
+    def goto_pose_callback(self, request, response):
+        target_pos = np.array([request.position[0], request.position[1]])
+        target_ori = request.orientation
+        self.get_logger().info(f"Received goto_pose request: position={target_pos}, orientation={target_ori}")
+        time.sleep(3.0)
+        self.get_logger().info("Arrived at target pose.")
+        return response
+
 
     def current_pose_callback(self, msg: CdprPose):
         current_pos = msg.position

@@ -14,22 +14,22 @@ class GripperController(Node):
         sys.excepthook = self.myexcepthook
 
         # Initialize motors
-        self.motor_IDs = [11,12]
-        self.motor_directions = [1,-1]
-        self.motors = DynamixelSync()
-        self.motors.setTurningDirection(motors=self.motor_IDs, directions=self.motor_directions)
-        self.motors.disable_torque(motors=self.motor_IDs)
-        self.motors.write(self.motor_IDs, OPERATING_MODES.EXTENDED_POSITION_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
-        self.motors.write(self.motor_IDs, 100, CONTROL_TABLE.PROFILE_VELOCITY)
-        self.motors.enable_torque(self.motor_IDs)
+        # self.motor_IDs = [11,12]
+        # self.motor_directions = [1,-1]
+        # self.motors = DynamixelSync()
+        # self.motors.setTurningDirection(motors=self.motor_IDs, directions=self.motor_directions)
+        # self.motors.disable_torque(motors=self.motor_IDs)
+        # self.motors.write(self.motor_IDs, OPERATING_MODES.EXTENDED_POSITION_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
+        # self.motors.write(self.motor_IDs, 100, CONTROL_TABLE.PROFILE_VELOCITY)
+        # self.motors.enable_torque(self.motor_IDs)
         
-        # Get Initial position
-        self.initial_motor_pos = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_POSITION)
+        # # Get Initial position
+        # self.initial_motor_pos = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_POSITION)
 
-        # publish services
-        self.grip_srv = self.create_service(Float64Srv, "grip", self.grip)
-        self.finger_distance_srv = self.create_service(Float64Srv, "finger_distance", self.finger_distance)
-        self.move_tcp_srv = self.create_service(Float64Srv, "move_tcp", self.move_tcp)
+        # Service servers
+        self.grip_srv = self.create_service(Float64Srv, '/gripper_control/grip', self.grip)
+        self.set_finger_distance_srv = self.create_service(Float64Srv, '/gripper_control/set_finger_distance', self.finger_distance)
+        self.move_TCP_srv = self.create_service(Float64Srv, '/gripper_control/move_TCP', self.move_tcp)
 
         self.get_logger().info(f"{node_name} Node has been started.")
     
@@ -46,18 +46,21 @@ class GripperController(Node):
     
 
     def move_tcp(self, request, response):
-        print("MOVE TCP: z =", request.z)
-        TCP_z = request.value
+        tcp_depth = request.value
+        print("tcp_depth =", tcp_depth)
+        return response
+        # print("MOVE TCP: z =", request.z)
+        # TCP_z = request.value
 
-        goal_pos = [self.initial_motor_pos[0]+TCP_z, self.initial_motor_pos[1]+TCP_z]
-        print("goal: ", goal_pos)
+        # goal_pos = [self.initial_motor_pos[0]+TCP_z, self.initial_motor_pos[1]+TCP_z]
+        # print("goal: ", goal_pos)
 
-        self.motors.write(self.motor_IDs, goal_pos, CONTROL_TABLE.GOAL_POSITION)
+        # self.motors.write(self.motor_IDs, goal_pos, CONTROL_TABLE.GOAL_POSITION)
 
-        actual_goal = self.motors.read(self.motor_IDs, CONTROL_TABLE.GOAL_POSITION)
-        actual_pos = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_POSITION)
-        print("actual_goal:", actual_goal)
-        print("actual_pos:", actual_pos)
+        # actual_goal = self.motors.read(self.motor_IDs, CONTROL_TABLE.GOAL_POSITION)
+        # actual_pos = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_POSITION)
+        # print("actual_goal:", actual_goal)
+        # print("actual_pos:", actual_pos)
 
         return response
 
