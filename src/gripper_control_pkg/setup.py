@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'gripper_controller = gripper_control_pkg.gripper_controller:main'
+            'gripper_controller = gripper_control_pkg.gripper_controller_stub:main'
         ],
     },
 )
