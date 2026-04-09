@@ -12,15 +12,12 @@ find_package(rosidl_default_generators REQUIRED)
 # Generate the interface
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CdprPose.msg"
-<<<<<<< HEAD
   "srv/FingerDistance.srv"
   "srv/Grip.srv"
   "srv/MoveTCP.srv"
-=======
   "srv/CdprPose.srv"
   "srv/CdprPos3D.srv"
   "srv/Float64.srv"
->>>>>>> b6f4919dfd8aa9341c8ede4d7f8cba752317986d
 )
 
 if(BUILD_TESTING)

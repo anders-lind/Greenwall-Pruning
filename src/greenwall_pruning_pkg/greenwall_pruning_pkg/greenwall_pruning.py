@@ -123,7 +123,7 @@ class GreenwallPruningNode(Node):
             self.get_logger().error("Failed to call end effector grip service.")
             return
         
-        # 8. Move down and away from leaf cdpr to pluck the leaf
+        # 8. Move CDPR down and away from leaf cdpr to pluck the leaf
         if self.pathplanner_goto_pose_client.wait_for_service(timeout_sec=1.0):
             goto_req = CdprPoseSrv.Request()
             goto_req.position.x = self.leaf_pos[0]

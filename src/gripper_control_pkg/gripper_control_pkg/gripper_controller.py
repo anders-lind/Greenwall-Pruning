@@ -3,7 +3,7 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
-from plantwall_custom_interfaces.srv import FingerDistance, Grip, MoveTCP
+from plantwall_custom_interfaces.srv import Float64 as Float64Srv
 
  
 class GripperController(Node):
@@ -27,32 +27,29 @@ class GripperController(Node):
         self.initial_motor_pos = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_POSITION)
 
         # publish services
-        self.grip_srv = self.create_service(Grip, "grip", self.grip)
-        self.finger_distance_srv = self.create_service(FingerDistance, "finger_distance", self.finger_distance)
-        self.move_tcp_srv = self.create_service(MoveTCP, "move_tcp", self.move_tcp)
+        self.grip_srv = self.create_service(Float64Srv, "grip", self.grip)
+        self.finger_distance_srv = self.create_service(Float64Srv, "finger_distance", self.finger_distance)
+        self.move_tcp_srv = self.create_service(Float64Srv, "move_tcp", self.move_tcp)
 
         self.get_logger().info(f"{node_name} Node has been started.")
     
 
     def grip(self, request, response):
-        print("GRIP")
-        
-        response.success = True
-
+        grip_thickness = request.value
+        print("GRIP: grip_thickness =", grip_thickness)
         return response
     
     def finger_distance(self, request, response):
-        print("FINGER DISTANCE: finger_dist =", request.finger_distance)
-
-        response.success = True
-
+        finger_distance = request.value
+        print("FINGER DISTANCE: finger_distance =", finger_distance)
         return response
     
 
     def move_tcp(self, request, response):
         print("MOVE TCP: z =", request.z)
+        TCP_z = request.value
 
-        goal_pos = [self.initial_motor_pos[0]+z, self.initial_motor_pos[1]+z]
+        goal_pos = [self.initial_motor_pos[0]+TCP_z, self.initial_motor_pos[1]+TCP_z]
         print("goal: ", goal_pos)
 
         self.motors.write(self.motor_IDs, goal_pos, CONTROL_TABLE.GOAL_POSITION)
@@ -62,11 +59,7 @@ class GripperController(Node):
         print("actual_goal:", actual_goal)
         print("actual_pos:", actual_pos)
 
-        response.success = True
-
         return response
-
-
 
 
     def myexcepthook(self, type, value, tb):
