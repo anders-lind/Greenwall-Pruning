@@ -5,6 +5,9 @@ from rclpy.node import Node
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
 from plantwall_custom_interfaces.srv import Float64 as Float64Srv
 import time
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+
 
  
 class GripperController(Node):
@@ -44,10 +47,12 @@ class GripperController(Node):
         self.motors.write(self.motor_IDs, [initial_homing_offset[0]-initial_motor_pos[0], initial_homing_offset[1]-initial_motor_pos[1]], CONTROL_TABLE.HOMING_OFFSET)
         self.motors.enable_torque(self.motor_IDs)
 
+        blocking_callback_group = MutuallyExclusiveCallbackGroup()
+
         # Service servers
-        self.grip_srv = self.create_service(Float64Srv, '/gripper_control/grip', self.grip_callback)
-        self.set_finger_distance_srv = self.create_service(Float64Srv, '/gripper_control/set_finger_distance', self.set_finger_distance_callback)
-        self.move_TCP_srv = self.create_service(Float64Srv, '/gripper_control/move_TCP', self.move_tcp_callback)
+        self.grip_srv = self.create_service(Float64Srv, '/gripper_control/grip', self.grip_callback, callback_group=blocking_callback_group)
+        self.set_finger_distance_srv = self.create_service(Float64Srv, '/gripper_control/set_finger_distance', self.set_finger_distance_callback, callback_group=blocking_callback_group)
+        self.move_TCP_srv = self.create_service(Float64Srv, '/gripper_control/move_TCP', self.move_tcp_callback, callback_group=blocking_callback_group)
 
         print("Created service: \"/gripper_control/grip\"")
         print("Created service: \"/gripper_control/set_finger_distance\"")
@@ -125,6 +130,13 @@ class GripperController(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = GripperController()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
