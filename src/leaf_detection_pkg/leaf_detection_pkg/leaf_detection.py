@@ -7,9 +7,12 @@ import sensor_msgs_py.point_cloud2 as pc2
 from std_msgs.msg import Header
 import rclpy
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from sensor_msgs.msg import Image, CameraInfo # Import the Image message type
 from plantwall_custom_interfaces.msg import CdprPose
 from std_srvs.srv import SetBool
+from plantwall_custom_interfaces.srv import CdprPos3D
 import torch
 import numpy as np
 from cv_bridge import CvBridge
@@ -39,13 +42,18 @@ class LeafDetectionNode(Node):
         self.camera_height = None
         self.camerea_width = None
 
+        self.current_pose = None
+
         self.leaf_detector_running = False
 
         self.mahalanobis_contour_area_threshold = 0.001 # ratio of entire image area
         self.sam2_contour_area_threshold = 0.01 # ratio of entire image area
 
         self.control_loop_period = 0.1 # 10 Hz
-        self.control_timer = self.create_timer(self.control_loop_period, self.leaf_detector)
+        self.ai_loop_cb_group = MutuallyExclusiveCallbackGroup()
+        self.control_timer = self.create_timer(self.control_loop_period, self.leaf_detector, callback_group=self.ai_loop_cb_group)
+
+        self.iterator = 0
 
         # Load training
         # mahal_data_path = "/home/anders/workspace/masters_thesis/Greenwall-Pruning/test_scripts/perception/perception_stats_cielab.npy"
@@ -85,19 +93,39 @@ class LeafDetectionNode(Node):
             '/camera/camera/aligned_depth_to_color/camera_info',
             self.camera_info_callback, 
             10)
+        
+        # Subscribe to current_pose
+        self.current_pose_subscriber = self.create_subscription(
+            CdprPose, 
+            '/cdpr/current_pose', 
+            self.current_pose_callback, 
+            10)
 
-        self.toggle_service = self.create_service(
+        # Ros service servers
+        self.toggle_srv = self.create_service(
             SetBool, 
             '/leaf_detection/toggle', 
             self.change_state_service_callback
         )
 
-    def color_image_callback(self, msg):    
-        self.color_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')        
+        # Ros service clients
+        self.trigger_pruning_sequence_client = self.create_client(
+            CdprPos3D, 
+            '/greenwall_pruning/trigger_pruning_sequence'
+        )
 
+    def color_image_callback(self, msg):    
+        self.color_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
+        self.get_logger().info("Received color image",throttle_duration_sec=0.1)
 
     def depth_image_callback(self, msg):
         self.depth_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='16UC1')
+        self.get_logger().info("Received depth image",throttle_duration_sec=0.1)
+
+    def current_pose_callback(self, msg: CdprPose):
+        current_pos = msg.position
+        current_ori = msg.orientation
+        self.current_pose = np.array([current_pos[0], current_pos[1], current_ori])
 
     def camera_info_callback(self, msg):
         if not self.info_received:
@@ -117,7 +145,7 @@ class LeafDetectionNode(Node):
         self.get_logger().info(response.message)
         return response
 
-    def leaf_detector(self):
+    async def leaf_detector(self):
         if not self.leaf_detector_running:
             return
         
@@ -125,44 +153,69 @@ class LeafDetectionNode(Node):
             self.get_logger().info("Color or depth image is not ready!")
             return
 
-        # Check image using fast mahalanobis
-        leaf_coordinate = self.mahalanobis_check()
+        # # Check image using fast mahalanobis
+        # leaf_coordinate = self.mahalanobis_check()
 
-        if leaf_coordinate is None:
-            self.get_logger().info(f"No leaf candidate found by Mahalanobis")
-            return
+        # if leaf_coordinate is None:
+        #     self.get_logger().info(f"No leaf candidate found by Mahalanobis")
+        #     return
 
-        self.get_logger().info(f"Mahalanobis candidate leaf found at coordinate: {leaf_coordinate}")
+        # self.get_logger().info(f"Mahalanobis candidate leaf found at coordinate: {leaf_coordinate}")
 
-        # If leaf candidate is found, use SAM2 on leaf coordinate
-        sam2_segment_mask = self.run_sam2(leaf_coordinate)
-        if sam2_segment_mask is None:
-            return
+        # # If leaf candidate is found, use SAM2 on leaf coordinate
+        # sam2_segment_mask = self.run_sam2(leaf_coordinate)
+        # if sam2_segment_mask is None:
+        #     return
         
-        sam2_segment_mask_u8 = (sam2_segment_mask.astype(np.uint8)) * 255
+        # sam2_segment_mask_u8 = (sam2_segment_mask.astype(np.uint8)) * 255
 
-        # Verify Area of sam2 leaf segmentation is large enough
-        sam2_contours,_ = cv2.findContours(sam2_segment_mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not sam2_contours:
-            return
-        sam2_largest_contour = max(sam2_contours, key=cv2.contourArea)
+        # # Verify Area of sam2 leaf segmentation is large enough
+        # sam2_contours,_ = cv2.findContours(sam2_segment_mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # if not sam2_contours:
+        #     return
+        # sam2_largest_contour = max(sam2_contours, key=cv2.contourArea)
 
-        if cv2.contourArea(sam2_largest_contour) < self.sam2_contour_area_threshold * (sam2_segment_mask_u8.shape[0] * sam2_segment_mask_u8.shape[1]):
-            self.get_logger().info("SAM2 found leaf too small for picking")
-            return
+        # if cv2.contourArea(sam2_largest_contour) < self.sam2_contour_area_threshold * (sam2_segment_mask_u8.shape[0] * sam2_segment_mask_u8.shape[1]):
+        #     self.get_logger().info("SAM2 found leaf too small for picking")
+        #     return
         
-        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask)
-        # self.save_3d_plot(leaf_pc)
-        self.publish_pointcloud(leaf_pc)
+        # leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask)
+        # # self.save_3d_plot(leaf_pc)
+        # self.publish_pointcloud(leaf_pc)
 
-        n_points = len(leaf_pc)
-        self.get_logger().info(f"Generated pointcloud with {n_points} points.")
+        # n_points = len(leaf_pc)
+        # self.get_logger().info(f"Generated pointcloud with {n_points} points.")
 
         # Placeholder: Currently we use point cloud median as grasping point
-        if n_points > 0:
-            grasp_target = np.median(leaf_pc, axis=0)
-            dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
+        # if n_points > 0:
+        self.iterator += 1
+        self.get_logger().info(f"Iterator: {self.iterator}", throttle_duration_sec=0.1)
+        if self.iterator > 100: # Activate after 10 seconds
+            # grasp_target = np.median(leaf_pc, axis=0)
+            # dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
 
+
+            self.iterator = 0
+            if self.trigger_pruning_sequence_client.service_is_ready():
+                req = CdprPos3D.Request()
+                
+                # Cast to standard Python floats to avoid Numpy errors
+                # req.x = float(dx)
+                # req.y = float(dy)
+                # req.z = float(dz)
+
+                # Make request with dummy coordinates as random offsets from current pose. Replace with real coordinates when perception is working.
+                req.x = float(self.current_pose[0] + np.random.uniform(-0.05, 0.05))
+                req.y = float(self.current_pose[1] + np.random.uniform(-0.05, 0.05))
+                req.z = np.random.uniform(0.1, 0.3)
+                
+                self.get_logger().info(f"Sending leaf coordinates to pruning node: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
+                # The AI timer pauses here while the robot physically performs the pruning sequence
+                await self.trigger_pruning_sequence_client.call_async(req)
+                self.get_logger().info("Pruning sequence completed. Resuming perception.")
+                
+            else:
+                self.get_logger().error("Greenwall Pruning service is not available. Cannot trigger pruning!")
 
     def mahalanobis_check(self) -> np.ndarray|None:
         class_configs = {
@@ -335,12 +388,23 @@ class LeafDetectionNode(Node):
         plt.close(fig) # Close to free up memory
         self.get_logger().info(f"3D Plot saved to {save_path}")
 
+# def main(args=None):
+#     rclpy.init(args=args)
+#     node = LeafDetectionNode()
+#     rclpy.spin(node)
+#     node.destroy_node()
+#     rclpy.shutdown()
+
 def main(args=None):
     rclpy.init(args=args)
     node = LeafDetectionNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
