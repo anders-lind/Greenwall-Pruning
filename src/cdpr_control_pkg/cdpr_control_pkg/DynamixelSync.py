@@ -19,6 +19,7 @@ class CONTROL_TABLE(Enum):
     PROFILE_VELOCITY = (112, 4, False)
     GOAL_POSITION = (116, 4, True)
     MOVING = (122, 1, False)
+    PRESENT_LOAD = (126, 2, True)
     PRESENT_CURRENT = (126, 2, True)
     PRESENT_VELOCITY = (128, 4, True)
     PRESENT_POSITION = (132, 4, True)
