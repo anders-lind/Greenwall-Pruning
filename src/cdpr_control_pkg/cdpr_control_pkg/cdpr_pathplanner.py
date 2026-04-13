@@ -3,168 +3,168 @@
 import rclpy
 import numpy as np
 from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from sensor_msgs.msg import Joy
 from plantwall_custom_interfaces.msg import CdprPose
 from plantwall_custom_interfaces.srv import CdprPose as CdprPoseSrv
 from std_srvs.srv import SetBool
 import time
+from enum import Enum
 
+class State(Enum):
+    IDLE = 0
+    SEARCHING = 1
+    GOTO = 2
 
 class CDPRPathplannerNode(Node):
     def __init__(self):
         super().__init__('cdpr_pathplanner')
         self.get_logger().info("CDPR Pathplanner Node has been started")
 
-        self.current_pose = None
-
+        # System parameters
         self.end_effector_height = 0.03916
         self.end_effector_width = 0.09322
-
         self.CDPR_height = 0.944
         self.CDPR_width = 0.908
         
+        # Auxiliary poses
         self.initial_pos = np.array([self.CDPR_width/2, 0.52-0.03])
         self.clear_homing_stick = self.initial_pos + np.array([0.0, 0.05])
         self.center_pos = np.array([self.CDPR_width/2, self.CDPR_height/2])
+        
+        # State variables
+        self.current_pose = None
         self.current_target_idx = 0
+        self.state = State.IDLE  # Start completely idle
+        self.active_target_pos = self.initial_pos.copy()
+        self.active_target_ori = 0.0
+
+        # Tuning variables
         self.smoothing_radius = 0.005 # 0.5 cm
-
-        ## Square path around the initial pose ##
-        # self.square_poses = [
-        #     self.initial_pos + np.array([0.00, 0.05]), # 5 cm up
-        #     self.initial_pos + np.array([0.05, 0.05]), # 5 cm up and 5 cm right
-        #     self.initial_pos + np.array([0.05, -0.05]), # 5 cm right and 5 cm down
-        #     self.initial_pos + np.array([-0.05, -0.05]), # 5 cm down and 5 cm left
-        #     self.initial_pos + np.array([-0.05, 0.05]), # 5 cm left and 5 cm up
-        #     self.initial_pos + np.array([0.0, 0.05]), # 5 cm up
-        #     self.initial_pos + np.array(-0.00995311  0.99995047[0.0, 0.0]) # back to initial pose
-        # ]
-
-        ## Workspace test poses ##
-        self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])]
-        # self.pos = [np.array([self.CDPR_width/2, self.CDPR_height])] # top
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height])] # top right corner
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, 0.0])] # bottom right corner
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, 0.0])] # bottom left corner
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height])] # top left corner
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width, self.CDPR_height/2])] # right side
-        # self.pos = [self.clear_homing_stick, self.center_pos, self.center_pos + np.array([0.0, 0.02]),  np.array([self.CDPR_width/2, 0.0])] # bottom side
-        # self.pos = [self.clear_homing_stick, np.array([self.CDPR_width/2, 0.0])] # bottom side no extra stops
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([0.0, self.CDPR_height/2])] # left side
-        # self.pos = [self.clear_homing_stick, self.center_pos, np.array([self.CDPR_width/2, self.CDPR_heignp.array([self.CDPR_width, self.CDPR_height/2])ht])] # top side
-
         self.pathplanner_loop_period = 0.02
 
-        # ROS Infrastructure
+        # Path poselist
+        self.poselist = [
+            self.initial_pos + np.array([0.00, 0.05]), 
+            self.initial_pos + np.array([0.05, 0.05]), 
+            self.initial_pos + np.array([0.05, -0.05]), 
+            self.initial_pos + np.array([-0.05, -0.05]), 
+            self.initial_pos + np.array([-0.05, 0.05]), 
+            self.initial_pos + np.array([0.0, 0.05]), 
+            self.initial_pos + np.array([0.0, 0.0]) 
+        ]
+
+        # Callback groups
+        self.service_cb_group = MutuallyExclusiveCallbackGroup()
+
+        # Service servers
+        self.toggle_search_state_srv = self.create_service(
+            SetBool, '/cdpr_pathplanner/toggle', self.toggle_search_state_callback) # Default group (fast)
+            
+        self.goto_pose_srv = self.create_service(
+            CdprPoseSrv, '/cdpr_pathplanner/goto_pose', self.goto_pose_callback,
+            callback_group=self.service_cb_group) # Custom group (slow/blocking)
+
+        # ROS Infrastructure (Default group)
         self.goto_pose_publisher = self.create_publisher(CdprPose, '/cdpr/goto_pose', 10)
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
-        self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_from_poselist)
-        
-        # Service servers
-        self.toggle_search_state_srv = self.create_service(SetBool, '/cdpr_pathplanner/toggle_search_state', self.toggle_search_state_callback)
-        self.goto_pose_srv = self.create_service(CdprPoseSrv, '/cdpr_pathplanner/goto_pose', self.goto_pose_callback)
+        self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_loop)
 
-        print(f"Full path is: {self.pos}")
-        print(f"First point is: {self.pos[0]}")
 
     def toggle_search_state_callback(self, request, response):
         if request.data:
             self.get_logger().info("Toggling pathplanner search state to ACTIVE.")
+            self.state = State.SEARCHING
         else:
             self.get_logger().info("Toggling pathplanner search state to INACTIVE.")
+            self.state = State.IDLE
+        response.success = True
         return response
     
     def goto_pose_callback(self, request, response):
+        self.state = State.GOTO
         target_pos = np.array([request.position[0], request.position[1]])
-        target_ori = request.orientation
-        self.get_logger().info(f"Received goto_pose request: position={target_pos}, orientation={target_ori}")
-        time.sleep(3.0)
-        self.get_logger().info("Arrived at target pose.")
+        self.active_target_pos = target_pos
+        self.active_target_ori = request.orientation
+        
+        self.get_logger().info(f"Received goto_pose request: position={target_pos}, orientation={self.active_target_ori}")
+        
+        # Wait inside GOTO state until the robot is within smooting radius of the target
+        while True:
+            if self.current_pose is not None:
+                distance = np.linalg.norm(self.current_pose[0:2] - target_pos)
+                if distance < self.smoothing_radius:
+                    break
+                # If target_pos is outside  of CDPR workspace. In that case break when we are close to the edge og the workspace.
+                min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
+                max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
+                clipped_target_pos = np.clip(target_pos, min_pos, max_pos)
+                clipped_distance = np.linalg.norm(self.current_pose[0:2] - clipped_target_pos)
+                if clipped_distance < self.smoothing_radius:
+                    break
+            
+            time.sleep(self.pathplanner_loop_period) 
+            
+        self.state = State.IDLE
+        self.get_logger().info("Arrived at target pose. Robot is now in IDLE state.")
         return response
-
 
     def current_pose_callback(self, msg: CdprPose):
         current_pos = msg.position
         current_ori = msg.orientation
         self.current_pose = np.array([current_pos[0], current_pos[1], current_ori])
         
-    def pathplanner_from_poselist(self):
-        goto_pose_msg = CdprPose()
+    def pathplanner_loop(self):
+        if self.state == State.IDLE:
+            return
+
         if self.current_pose is None:
             return
 
-        if self.current_target_idx >= len(self.pos):
-            return
+        # 2. If searching, go from current pose to next pose in poselist
+        if self.state == State.SEARCHING:
+            target = self.poselist[self.current_target_idx]
+            self.active_target_pos = target
+            self.active_target_ori = 0.0
 
-        # Go to towards next point until within smoothing radius, then switch to next point
-        if np.linalg.norm(self.current_pose[0:2] -self.pos[self.current_target_idx]) < self.smoothing_radius:
-            self.current_target_idx = self.current_target_idx + 1
-            print(f"Next pose: {self.pos[self.current_target_idx]}")
-            if self.current_target_idx >= len(self.pos):
-                print("Trajectory completed")
-                return
-        
-        orientation = 0.0
+            # Update to next target in poselist if robot is within smooting radius of current target
+            distance = np.linalg.norm(self.current_pose[0:2] - target)
+            if distance < self.smoothing_radius:
+                self.current_target_idx += 1
+                self.get_logger().info(f"Waypoint reached. Moving to index {self.current_target_idx}")
+                
+                # Loop the path back to the beginning if path is completed
+                if self.current_target_idx >= len(self.poselist):
+                    self.current_target_idx = 0
+                    self.get_logger().info("Search path completed. Looping back to start.")
 
-        # Clip pos
+        # 3. If GOTO, the target is already set by the service callback. 
+
+        # Clip position and orienation to safe limits
         min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
         max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
-        self.pos[self.current_target_idx] = np.clip(self.pos[self.current_target_idx], min_pos, max_pos)
+        safe_pos = np.clip(self.active_target_pos, min_pos, max_pos)
 
-        # Clip ori
         abs_max_ori = 0.3
-        orientation = np.clip(orientation, -abs_max_ori, abs_max_ori)
+        safe_ori = np.clip(self.active_target_ori, -abs_max_ori, abs_max_ori)
         
         # Publish target
-        goto_pose_msg.position = self.pos[self.current_target_idx].tolist()
-        goto_pose_msg.orientation = orientation
-        self.goto_pose_publisher.publish(goto_pose_msg)
-
-    def pathplanner_online_circle(self):
-        if self.current_pose is None:
-            return
-
-        # Circle parameters
-        circle_radius = 0.1 # m
-        circle_discretization = 20
-        angle_step = 2 * np.pi / circle_discretization
-        
-        # Check if circle trajectory is complete
-        if self.current_target_idx > circle_discretization:
-            target_pose = self.initial_pos
-        else:
-            # Calculate the specific point on the circle for the current index, starting from the top
-            current_angle = (angle_step * self.current_target_idx) + (np.pi / 2)
-            target_pose = self.initial_pos + np.array([np.cos(current_angle), np.sin(current_angle)]) * circle_radius
-
-        # Check distance to the ACTIVE target pose
-        if self.current_target_idx <= circle_discretization:
-            distance_to_target = np.linalg.norm(self.current_pose[0:2] - target_pose)
-            
-            if distance_to_target < self.smoothing_radius:
-                self.get_logger().info(f"Reached target point {target_pose:.2f} ({self.current_target_idx} of {circle_discretization}). Moving to next target")
-                self.current_target_idx += 1
-                
-                # 3. Update target_pose immediately for the current frame
-                if self.current_target_idx > circle_discretization:
-                    target_pose = self.initial_pos
-                else:
-                    new_angle = (angle_step * self.current_target_idx) + (np.pi / 2)
-                    target_pose = self.initial_pos + np.array([np.cos(new_angle), np.sin(new_angle)]) * circle_radius
-
-        # 4. Construct message and publish
         goto_pose_msg = CdprPose()
-        goto_pose_msg.position = target_pose.tolist()
-        goto_pose_msg.orientation = 0.0
-
+        goto_pose_msg.position = safe_pos.tolist()
+        goto_pose_msg.orientation = float(safe_ori)
         self.goto_pose_publisher.publish(goto_pose_msg)
 
 def main(args=None):
     rclpy.init(args=args)
     node = CDPRPathplannerNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
+    try:
+        executor.spin()
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

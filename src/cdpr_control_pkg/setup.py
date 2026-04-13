@@ -33,7 +33,8 @@ setup(
             'cdpr_manual_homing = cdpr_control_pkg.cdpr_manual_homing:main',
             'cdpr_pathplanner = cdpr_control_pkg.cdpr_pathplanner:main',
             'cdpr_visualizer = cdpr_control_pkg.cdpr_visualizer:main',
-            'visualizer_tester = cdpr_control_pkg.visualizer_tester:main'
+            'visualizer_tester = cdpr_control_pkg.visualizer_tester:main',
+            'cdpr_stub = cdpr_control_pkg.cdpr_stub:main'
         ],
     },
 )
