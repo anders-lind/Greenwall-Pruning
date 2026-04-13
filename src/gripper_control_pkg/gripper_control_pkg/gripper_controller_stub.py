@@ -4,6 +4,7 @@ import numpy as np
 from rclpy.node import Node
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
 from plantwall_custom_interfaces.srv import Float64 as Float64Srv
+import time
 
  
 class GripperController(Node):
@@ -21,17 +22,19 @@ class GripperController(Node):
     def grip(self, request, response):
         grip_thickness = request.value
         print("GRIP: grip_thickness =", grip_thickness)
+        time.sleep(1)
         return response
     
     def finger_distance(self, request, response):
         finger_distance = request.value
         print("FINGER DISTANCE: finger_distance =", finger_distance)
+        time.sleep(1)
         return response
 
     def move_tcp(self, request, response):
         tcp_depth = request.value
         print("tcp_depth =", tcp_depth)
-
+        time.sleep(1)
         return response
 
 
