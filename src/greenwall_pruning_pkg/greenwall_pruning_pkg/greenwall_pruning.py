@@ -174,15 +174,15 @@ class GreenwallPruningNode(Node):
                 self.get_logger().error("Failed to call perception toggle service to reactivate.")
                 return response
             
-            # # 12. Toggle pathplanner search mode back on
-            # if self.cdpr_pathplanner_toggle_client.wait_for_service(timeout_sec=1.0):
-            #     toggle_req = SetBool.Request()
-            #     toggle_req.data = True
-            #     await self.cdpr_pathplanner_toggle_client.call_async(toggle_req)
-            #     self.get_logger().info("Toggled pathplanner search state back to active.")
-            # else:
-            #     self.get_logger().error("Failed to call pathplanner search state service to reactivate.")
-            #     return response
+            # 12. Toggle pathplanner search mode back on
+            if self.cdpr_pathplanner_toggle_client.wait_for_service(timeout_sec=1.0):
+                toggle_req = SetBool.Request()
+                toggle_req.data = True
+                await self.cdpr_pathplanner_toggle_client.call_async(toggle_req)
+                self.get_logger().info("Toggled pathplanner search state back to active.")
+            else:
+                self.get_logger().error("Failed to call pathplanner search state service to reactivate.")
+                return response
 
         finally:
             self.executing_sequence = False

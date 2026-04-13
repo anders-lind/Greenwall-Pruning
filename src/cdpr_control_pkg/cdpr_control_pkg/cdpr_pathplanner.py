@@ -11,6 +11,7 @@ from plantwall_custom_interfaces.srv import CdprPose as CdprPoseSrv
 from std_srvs.srv import SetBool
 import time
 from enum import Enum
+import os
 
 class State(Enum):
     IDLE = 0
@@ -36,37 +37,55 @@ class CDPRPathplannerNode(Node):
         # State variables
         self.current_pose = None
         self.current_target_idx = 0
-        self.state = State.IDLE  # Start completely idle
+        self.state = State.IDLE  
         self.active_target_pos = self.initial_pos.copy()
         self.active_target_ori = 0.0
+        
+        # Variable for storing the resume position for when search is interrupted
+        self.resume_pos = None
+        self.needs_to_resume = False
 
         # Tuning variables
         self.smoothing_radius = 0.005 # 0.5 cm
         self.pathplanner_loop_period = 0.02
 
-        # Path poselist
-        self.poselist = [
-            self.initial_pos + np.array([0.00, 0.05]), 
-            self.initial_pos + np.array([0.05, 0.05]), 
-            self.initial_pos + np.array([0.05, -0.05]), 
-            self.initial_pos + np.array([-0.05, -0.05]), 
-            self.initial_pos + np.array([-0.05, 0.05]), 
-            self.initial_pos + np.array([0.0, 0.05]), 
-            self.initial_pos + np.array([0.0, 0.0]) 
-        ]
+        # Startup sequence variables
+        self.startup_poses = [self.initial_pos, self.clear_homing_stick]
+        self.startup_idx = 0
+        self.has_exited_homing = False
+
+        path_file = os.path.join(os.path.expanduser("~"), "Thesis", "cdpr_search_path.csv")
+        try:
+            # Load the CSV into a numpy array of shape (N, 2)
+            self.poselist = np.loadtxt(path_file, delimiter=",")
+            self.get_logger().info(f"Successfully loaded {len(self.poselist)} offline waypoints.")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load path file: {e}. Falling back to default center pose.")
+            self.poselist = np.array([self.center_pos]) # Safe fallback
+
+        # # Path poselist
+        # self.poselist = [
+        #     self.initial_pos + np.array([0.00, 0.05]), 
+        #     self.initial_pos + np.array([0.05, 0.05]), 
+        #     self.initial_pos + np.array([0.05, -0.05]), 
+        #     self.initial_pos + np.array([-0.05, -0.05]), 
+        #     self.initial_pos + np.array([-0.05, 0.05]), 
+        #     self.initial_pos + np.array([0.0, 0.05]), 
+        #     self.initial_pos + np.array([0.0, 0.0]) 
+        # ]
 
         # Callback groups
         self.service_cb_group = MutuallyExclusiveCallbackGroup()
 
         # Service servers
         self.toggle_search_state_srv = self.create_service(
-            SetBool, '/cdpr_pathplanner/toggle', self.toggle_search_state_callback) # Default group (fast)
+            SetBool, '/cdpr_pathplanner/toggle', self.toggle_search_state_callback) 
             
         self.goto_pose_srv = self.create_service(
             CdprPoseSrv, '/cdpr_pathplanner/goto_pose', self.goto_pose_callback,
-            callback_group=self.service_cb_group) # Custom group (slow/blocking)
+            callback_group=self.service_cb_group) 
 
-        # ROS Infrastructure (Default group)
+        # ROS Infrastructure
         self.goto_pose_publisher = self.create_publisher(CdprPose, '/cdpr/goto_pose', 10)
         self.current_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
         self.pathplanner_timer = self.create_timer(self.pathplanner_loop_period, self.pathplanner_loop)
@@ -79,6 +98,12 @@ class CDPRPathplannerNode(Node):
         else:
             self.get_logger().info("Toggling pathplanner search state to INACTIVE.")
             self.state = State.IDLE
+            
+            # Log the resume position when search is interrupted, so we can return to it when search is toggled back on
+            if self.current_pose is not None:
+                self.resume_pos = self.current_pose[0:2].copy()
+                self.needs_to_resume = True
+                
         response.success = True
         return response
     
@@ -96,7 +121,7 @@ class CDPRPathplannerNode(Node):
                 distance = np.linalg.norm(self.current_pose[0:2] - target_pos)
                 if distance < self.smoothing_radius:
                     break
-                # If target_pos is outside  of CDPR workspace. In that case break when we are close to the edge og the workspace.
+                # If target_pos is outside of CDPR workspace. 
                 min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
                 max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
                 clipped_target_pos = np.clip(target_pos, min_pos, max_pos)
@@ -122,24 +147,52 @@ class CDPRPathplannerNode(Node):
         if self.current_pose is None:
             return
 
-        # 2. If searching, go from current pose to next pose in poselist
+        # 2. SEARCHING STATE LOGIC
         if self.state == State.SEARCHING:
-            target = self.poselist[self.current_target_idx]
-            self.active_target_pos = target
-            self.active_target_ori = 0.0
-
-            # Update to next target in poselist if robot is within smooting radius of current target
-            distance = np.linalg.norm(self.current_pose[0:2] - target)
-            if distance < self.smoothing_radius:
-                self.current_target_idx += 1
-                self.get_logger().info(f"Waypoint reached. Moving to index {self.current_target_idx}")
+            
+            # Priority 1: Backtrack to breadcrumb if interrupted
+            if self.needs_to_resume and self.resume_pos is not None:
+                target = self.resume_pos
+                self.active_target_pos = target
+                self.active_target_ori = 0.0
                 
-                # Loop the path back to the beginning if path is completed
-                if self.current_target_idx >= len(self.poselist):
-                    self.current_target_idx = 0
-                    self.get_logger().info("Search path completed. Looping back to start.")
+                distance = np.linalg.norm(self.current_pose[0:2] - target)
+                if distance < self.smoothing_radius:
+                    self.get_logger().info("Successfully returned to pre-interruption pose.")
+                    self.needs_to_resume = False 
+                    
+            # Priority 2: Execute startup sequence if we haven't yet
+            elif not self.has_exited_homing:
+                target = self.startup_poses[self.startup_idx]
+                self.active_target_pos = target
+                self.active_target_ori = 0.0
+                
+                distance = np.linalg.norm(self.current_pose[0:2] - target)
+                if distance < self.smoothing_radius:
+                    self.startup_idx += 1
+                    self.get_logger().info(f"Homing exit waypoint {self.startup_idx} reached.")
+                    
+                    if self.startup_idx >= len(self.startup_poses):
+                        self.has_exited_homing = True
+                        self.get_logger().info("Successfully exited homing fixture. Starting offline path tracking.")
 
-        # 3. If GOTO, the target is already set by the service callback. 
+            # Priority 3: Normal offline poselist tracking
+            else:
+                target = self.poselist[self.current_target_idx]
+                self.active_target_pos = target
+                self.active_target_ori = 0.0
+
+                distance = np.linalg.norm(self.current_pose[0:2] - target)
+                if distance < self.smoothing_radius:
+                    self.current_target_idx += 1
+                    self.get_logger().info(f"Waypoint reached. Moving to offline index {self.current_target_idx}")
+                    
+                    # Loop the offline path back to the beginning!
+                    if self.current_target_idx >= len(self.poselist):
+                        self.current_target_idx = 0
+                        self.get_logger().info("Search path completed. Looping back to start (bypassing homing).")
+
+        # 3. GOTO state logic bypasses the search targets 
 
         # Clip position and orienation to safe limits
         min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
