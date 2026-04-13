@@ -1,5 +1,5 @@
 from dynamixel_sdk import PortHandler, PacketHandler, GroupSyncWrite, GroupSyncRead
-from enum import Enum
+from enum import Enum, IntEnum
 
 class CONTROL_TABLE(Enum):
     # NAME = (ADDRESS, LEN, IS_SIGNED)
@@ -18,12 +18,13 @@ class CONTROL_TABLE(Enum):
     PROFILE_ACCELERATION = (108, 4, False)
     PROFILE_VELOCITY = (112, 4, False)
     GOAL_POSITION = (116, 4, True)
+    MOVING = (122, 1, False)
     PRESENT_CURRENT = (126, 2, True)
     PRESENT_VELOCITY = (128, 4, True)
     PRESENT_POSITION = (132, 4, True)
 
 
-class OPERATING_MODES(Enum):
+class OPERATING_MODES(IntEnum):
     CURRENT_CONTROL_MODE = 0
     VELOCITY_CONTROL_MODE = 1
     POSITION_CONTROL_MODE = 3
@@ -63,6 +64,19 @@ class DynamixelSync:
 
 
     def write(self, motors: list[int], values: int|list[int]|OPERATING_MODES, control_type: CONTROL_TABLE) -> None:
+        # Check if values is a list only containing integers
+        if isinstance(values, list):
+            for i in range(len(values)):
+                if not isinstance(values[i], int):
+                    print(f"ERROR: 'values' contain non-integer value \"{values[i]}\" at index={i}.")
+                    raise TypeError
+        # Check if values is integer
+        elif not isinstance(values, int):
+            print(f"ERROR: 'values' not an integer or a list of integers! Is type \"{type(values)}\"")
+            raise TypeError
+
+            
+        
         address = control_type.value[0]
         data_length = control_type.value[1]
         is_signed = control_type.value[2]
@@ -71,26 +85,26 @@ class DynamixelSync:
 
         # If signed, adjust values based on motor direction
         if is_signed:
-            if type(values) == int:
+            if isinstance(values, int):
                 values = values * self.motorDirections[motors[0]]
-            elif type(values) == list:
+            elif isinstance(values, list):
                 for i in range(len(values)):
                     values[i] = values[i] * self.motorDirections[motors[i]]
 
         for i in range(len(motors)):
             motor_id = self.motor_name_to_motor_id(motors[i])
             param = None
-            if type(values) == int:
+            if isinstance(values, int):
                 try:
                     param = (values).to_bytes(data_length, 'little', signed=is_signed)
                 except:
                     print("ERROR: (values, data_len)", values, ",", data_length)
-            elif type(values) == list:
+            elif isinstance(values, list):
                 try:
                     param = (values[i]).to_bytes(data_length, 'little', signed=is_signed)
                 except:
                     print("ERROR: (values[i], data_len)", values[i], ",", data_length)
-            elif type(values) == OPERATING_MODES:
+            elif isinstance(values, OPERATING_MODES):
                 param = (values.value).to_bytes(data_length, 'little', signed=is_signed)
             else:
                 print("ERROR: invalid values type. Got:", type(values))
