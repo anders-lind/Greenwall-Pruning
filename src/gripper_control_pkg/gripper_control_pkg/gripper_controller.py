@@ -29,7 +29,7 @@ class GripperController(Node):
         self.finger_distance = 0.0
 
         # Behavior when program crashes
-        sys.excepthook = self.myexcepthook
+        # sys.excepthook = self.myexcepthook
 
         # Initialize motors
         self.motor_IDs = [12,11]
@@ -91,9 +91,22 @@ class GripperController(Node):
         print("grip_callback:", request.value)
         
         grip_thickness = request.value
+        
+        # GO TO FINGER DISTANCE LOW
 
-        # Close gripper
-        # TODO
+        # Begin grasp
+        self.motors.disable_torque(self.motor_IDs)
+        self.motors.write(self.motor_IDs, OPERATING_MODES.VELOCITY_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
+        self.motors.enable_torque(self.motor_IDs)
+        self.motors.write(self.motor_IDs, [5,-5], CONTROL_TABLE.GOAL_VELOCITY)
+        
+        # WAIT FOR PRESENT_LOAD = (126, 2, True) HIGH (FILTER PRESENT LOAD?)
+        self.motors.write(self.motor_IDs, [0,0], CONTROL_TABLE.GOAL_VELOCITY)
+
+
+        print("OPERATING_MODE:", self.motors.read(self.motor_IDs, CONTROL_TABLE.OPERATING_MODE))
+        print("GOAL_CURRENT:", self.motors.read(self.motor_IDs, CONTROL_TABLE.GOAL_CURRENT))
+
         
         return response
     

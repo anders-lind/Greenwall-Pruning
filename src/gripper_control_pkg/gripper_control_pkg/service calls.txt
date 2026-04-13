@@ -1,3 +1,5 @@
-ros2 service call /gripper_control/set_finger_distance plantwall_custom_interfaces/srv/Float64 "{value: -1000}"
+ros2 service call /gripper_control/move_TCP plantwall_custom_interfaces/srv/Float64 "{value: 0.01}"
 
-ros2 service call /gripper_control/move_TCP plantwall_custom_interfaces/srv/Float64 "{value: -1000}"
+ros2 service call /gripper_control/set_finger_distance plantwall_custom_interfaces/srv/Float64 "{value: 0.01}"
+
+ros2 service call /gripper_control/grip plantwall_custom_interfaces/srv/Float64 "{value: 0.01}"
