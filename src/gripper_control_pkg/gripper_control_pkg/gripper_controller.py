@@ -4,6 +4,7 @@ import numpy as np
 from rclpy.node import Node
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
 from plantwall_custom_interfaces.srv import Float64 as Float64Srv
+from std_srvs.srv import SetBool
 import time
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
@@ -18,6 +19,8 @@ class GripperController(Node):
         self.goal_distance_threshold = 100.0 # The allowed maximum deviation from the exact goal position
         self.filter_alpha = 0.8 # Use 80% of the new value
         self.load_threshold = 100.0 # 0.1% of motor max torque
+        self.grasp_speed = 5
+        self.grasp_force = 100
 
         # Physical properties
         self.gear_radius = 0.015
@@ -40,7 +43,9 @@ class GripperController(Node):
         # sys.excepthook = self.myexcepthook
 
         # Initialize motors
-        self.motor_IDs = [12,11]
+        top_motor_ID = 12
+        bot_motor_ID = 11
+        self.motor_IDs = [top_motor_ID, bot_motor_ID]
         self.motor_directions = [-1,1]
         self.motors = DynamixelSync()
         self.motors.setTurningDirection(motors=self.motor_IDs, directions=self.motor_directions)
@@ -55,7 +60,7 @@ class GripperController(Node):
         blocking_callback_group = MutuallyExclusiveCallbackGroup()
 
         # Service servers
-        self.grip_srv = self.create_service(Float64Srv, '/gripper_control/grip', self.grip_callback, callback_group=blocking_callback_group)
+        self.grip_srv = self.create_service(SetBool, '/gripper_control/grip', self.grip_callback, callback_group=blocking_callback_group)
         self.set_finger_distance_srv = self.create_service(Float64Srv, '/gripper_control/set_finger_distance', self.set_finger_distance_callback, callback_group=blocking_callback_group)
         self.move_TCP_srv = self.create_service(Float64Srv, '/gripper_control/move_TCP', self.move_tcp_callback, callback_group=blocking_callback_group)
 
@@ -83,6 +88,15 @@ class GripperController(Node):
         if np.any(self.present_load > self.load_threshold):
             print("Load above threshold! Stopping motors.")
             self.motors.disable_torque(self.motor_IDs)
+    
+
+    def loosen_grip(self):
+        print("Loosening grip")
+        self.motors.disable_torque(self.motor_IDs)
+        self.motors.write(self.motor_IDs, OPERATING_MODES.EXTENDED_POSITION_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
+        self.motors.enable_torque(self.motor_IDs)
+        self.is_grasping = False
+
 
     def move_to_desired(self):
         print(f"Desired tcp: {self.tcp_pos}")
@@ -116,31 +130,65 @@ class GripperController(Node):
     
 
     def grip_callback(self, request, response):
-        print("grip_callback:", request.value)
+        print("grip_callback:", request.data)
+        # TODO: UNTESTED: PRESENT_LOAD FAILSAFE AND FILTER
+
+        stop_gripping = not request.value
         
-        grip_thickness = request.value
+        # Stop gripping if requested
+        if not stop_gripping:
+            self.loosen_grip()
+            response.success = True
+            return response
         
         # GO TO FINGER DISTANCE LOW
+        self.finger_distance = 0.01
+        self.move_to_desired()
 
         # Begin grasp
+        self.is_grasping = True
         self.motors.disable_torque(self.motor_IDs)
         self.motors.write(self.motor_IDs, OPERATING_MODES.VELOCITY_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
         self.motors.enable_torque(self.motor_IDs)
-        self.motors.write(self.motor_IDs, [5,-5], CONTROL_TABLE.GOAL_VELOCITY)
+        self.motors.write(self.motor_IDs, [self.grasp_speed, -self.grasp_speed], CONTROL_TABLE.GOAL_VELOCITY)
         
-        # WAIT FOR PRESENT_LOAD = (126, 2, True) HIGH (FILTER PRESENT LOAD?)
-        self.motors.write(self.motor_IDs, [0,0], CONTROL_TABLE.GOAL_VELOCITY)
+        # Tighten grasp until grasp force is reached on both motors
+        grasp_force_exceeded = False
+        while (not grasp_force_exceeded):
+            # get present load
+            present_load = self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_LOAD)
+
+            # Stop each motor as they reach grasp_force
+            move_top_motor = False
+            move_bot_motor = False
+            if present_load[0] < self.grasp_force:
+                move_top_motor = True
+            if present_load[1] < self.grasp_force:
+                move_bot_motor = True
+            actual_grasp_speed = [self.grasp_speed*move_top_motor, self.grasp_speed*move_bot_motor]
+
+            # Send motor commands
+            self.motors.write(self.motor_IDs, actual_grasp_speed, CONTROL_TABLE.GOAL_VELOCITY)
+
+            # Stop while-loop if both motors have reached desired grasp force
+            if not move_bot_motor and not move_top_motor:
+                grasp_force_exceeded = True
+                break
+
 
 
         print("OPERATING_MODE:", self.motors.read(self.motor_IDs, CONTROL_TABLE.OPERATING_MODE))
         print("GOAL_CURRENT:", self.motors.read(self.motor_IDs, CONTROL_TABLE.GOAL_CURRENT))
 
-        
+        response.success = True
         return response
     
     
     def set_finger_distance_callback(self, request, response):
         print("set_finger_distance_callback:", request.value)
+
+        if self.is_grasping:
+            self.loosen_grip()
         
         self.finger_distance = request.value
         self.move_to_desired()
@@ -150,6 +198,9 @@ class GripperController(Node):
 
     def move_tcp_callback(self, request, response):
         print("move_tcp_callback:", request.value)
+
+        if self.is_grasping:
+            self.loosen_grip()
 
         self.tcp_pos = request.value
         self.move_to_desired()
