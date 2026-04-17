@@ -4,7 +4,6 @@ import numpy as np
 from rclpy.node import Node
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
 from plantwall_custom_interfaces.srv import Float64 as Float64Srv
-# from std_srvs.srv import SetBool
 from example_interfaces.srv import SetBool
 import time
 from rclpy.executors import MultiThreadedExecutor
@@ -19,7 +18,7 @@ class GripperController(Node):
         # Member variables
         self.goal_distance_threshold = 100.0 # The allowed maximum deviation from the exact goal position
         self.filter_alpha = 0.8 # Use 80% of the new value
-        self.load_threshold = 100.0 # 0.1% of motor max torque
+        self.load_threshold = 500.0 # 0.1% of motor max torque
         self.grasp_speed = 5
         self.grasp_force = 100
         self.is_grasping = False
@@ -43,7 +42,7 @@ class GripperController(Node):
         self.finger_distance = 0.0
 
         # Behavior when program crashes
-        # sys.excepthook = self.myexcepthook
+        sys.excepthook = self.myexcepthook
 
         # Initialize motors
         top_motor_ID = 12
@@ -78,6 +77,11 @@ class GripperController(Node):
 
     def background_loop(self):
         pass
+        # Check if present load is above threshold and stop if so
+        if np.any(self.present_load > self.load_threshold):
+            print("Load above threshold! Stopping motors.")
+            self.motors.disable_torque(self.motor_IDs)
+
         # # Read and filter present load
         # raw_load = np.array(self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_LOAD))
         # if np.any(raw_load == None):
@@ -88,10 +92,6 @@ class GripperController(Node):
         #     (1.0 - self.filter_alpha) * self.present_load
         # )
 
-        # # Check if present load is above threshold and stop if so
-        # if np.any(self.present_load > self.load_threshold):
-        #     print("Load above threshold! Stopping motors.")
-        #     self.motors.disable_torque(self.motor_IDs)
     
 
     def loosen_grip(self):
