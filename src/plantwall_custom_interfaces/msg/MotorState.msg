@@ -1,0 +1,15 @@
+int32[] motor_id
+int32[] operating_mode
+int32[] homing_offset
+int32[] current_limit
+int32[] velocity_limit
+int32[] torque_enable
+int32[] goal_current
+int32[] goal_velocity
+int32[] profile_velocity
+int32[] goal_position
+int32[] moving
+int32[] present_load
+int32[] present_current
+int32[] present_velocity
+int32[] present_position

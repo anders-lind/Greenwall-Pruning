@@ -12,6 +12,8 @@ find_package(rosidl_default_generators REQUIRED)
 # Generate the interface
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/CdprPose.msg"
+  "msg/MotorCmd.msg"
+  "msg/MotorState.msg"
   "srv/FingerDistance.srv"
   "srv/Grip.srv"
   "srv/MoveTCP.srv"
