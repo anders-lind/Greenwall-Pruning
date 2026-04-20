@@ -195,7 +195,6 @@ class GripperController(Node):
         self.get_logger().error("CRASH BEHAVIOR DONE")
 
 
-
 def main(args=None):
     rclpy.init(args=args)
     node = GripperController()
