@@ -95,11 +95,14 @@ class CDPRPathplannerNode(Node):
         if request.data:
             self.get_logger().info("Toggling pathplanner search state to ACTIVE.")
             self.state = State.SEARCHING
+        elif self.state == State.IDLE:
+            self.get_logger().info("Pathplanner is already in IDLE state. No action taken.")
+            response.success = True
+            return response
         else:
             self.get_logger().info("Toggling pathplanner search state to INACTIVE.")
             self.state = State.IDLE
-            
-            # Log the resume position when search is interrupted, so we can return to it when search is toggled back on
+            # Log the resume position when search is interrupted, so it can returned to when search is toggled back on
             if self.current_pose is not None:
                 self.resume_pos = self.current_pose[0:2].copy()
                 self.needs_to_resume = True
