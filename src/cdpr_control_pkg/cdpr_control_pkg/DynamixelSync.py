@@ -35,11 +35,11 @@ class OPERATING_MODES(IntEnum):
 
 
 class DynamixelSync:
-    def __init__(self, port_name: str = "/dev/ttyUSB0", buad_rate: int = 115200, protocol_version: float = 2.0) -> None:
+    def __init__(self, port_name: str = "/dev/ttyUSB0", baud_rate: int = 115200, protocol_version: float = 2.0) -> None:
         self.port_handler = PortHandler(port_name=port_name)
         self.packet_handler = PacketHandler(protocol_version=protocol_version)
         self.port_handler.openPort()
-        self.port_handler.setBaudRate(baudrate=buad_rate)
+        self.port_handler.setBaudRate(baudrate=baud_rate)
         self.motorDirections = {1:1, 2:1, 3:1, 4:1}
 
     

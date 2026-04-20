@@ -26,9 +26,9 @@ class CDPRBaseControlNode(Node):
         self.control_loop_period = 0.02 # 50 Hz
 
         # Homing parameters
-        self.homing_speed = int(30) # Motor units [0.229 RPM]
+        self.homing_speed = int(10) # Motor units [0.229 RPM]
         self.home_tension = 5 # Newton
-        self.force_tension_time = 0.1 # S
+        self.force_tension_time = 0.0 # S Old=0.1
         self.homing_loop_period = self.control_loop_period
 
         # Tension safety check parameters
@@ -49,18 +49,27 @@ class CDPRBaseControlNode(Node):
         
         self.CDPR_height = 0.944
         self.CDPR_width = 0.908
-        self.end_effector_height = 0.03916
-        self.end_effector_width = 0.09322
+        self.end_effector_height = 0.160
+        self.end_effector_width = 0.107
+        # Old
+        # self.end_effector_height = 0.03916
+        # self.end_effector_width = 0.09322
 
         self.B1 = np.array([0, self.CDPR_height])
         self.B2 = np.array([self.CDPR_width, self.CDPR_height])
         self.B3 = np.array([self.CDPR_width, 0])
         self.B4 = np.array([0, 0])
 
-        self.q1 = np.array([-self.end_effector_width/2, self.end_effector_height/2])  
-        self.q2 = np.array([self.end_effector_width/2, self.end_effector_height/2])
-        self.q3 = np.array([self.end_effector_width/2, -self.end_effector_height/2])
-        self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
+        self.q1 = np.array([-0.0433,  0.0242]) 
+        self.q2 = np.array([ 0.0639,  0.0242])
+        self.q3 = np.array([ 0.0639, -0.1358])
+        self.q4 = np.array([-0.0433, -0.1358])
+
+        # Old
+        # self.q1 = np.array([-self.end_effector_width/2, self.end_effector_height/2])
+        # self.q2 = np.array([self.end_effector_width/2, self.end_effector_height/2])
+        # self.q3 = np.array([self.end_effector_width/2, -self.end_effector_height/2])
+        # self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
 
         # CONTROLLER GAINS
         self.movement_speed = 0.01 # m/s

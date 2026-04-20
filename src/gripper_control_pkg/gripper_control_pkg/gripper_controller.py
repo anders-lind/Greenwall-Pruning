@@ -16,26 +16,21 @@ class GripperController(Node):
         super().__init__(node_name)
 
         # Member variables
-        self.goal_distance_threshold = 100.0 # The allowed maximum deviation from the exact goal position
-        self.filter_alpha = 0.8 # Use 80% of the new value
-        self.load_threshold = 500.0 # 0.1% of motor max torque
+        self.safety_check_load_threshold = 300.0 # unit is 0.1% of motor max torque
         self.grasp_speed = 5
-        self.grasp_force = 100
+        self.grasp_force = 200
         self.is_grasping = False
-        self.speed_profile = 30
+        self.speed_profile = 60
 
         # Physical properties
         self.gear_radius = 0.015
         self.gear_circumference = 2*3.1415*self.gear_radius
         self.motor_values_per_rotation = 4095
         self.dist_to_motor_value = self.motor_values_per_rotation / self.gear_circumference
-        self.max_top_pos = 0.05
-        self.max_bot_pos = 0.05
+        self.max_top_pos = 0.30
+        self.max_bot_pos = 0.30
         self.min_top_pos = 0
         self.min_bot_pos = 0
-
-        # State variables
-        self.present_load = np.array([0.0, 0.0])
 
         # Zero inits
         self.tcp_pos = 0.0
@@ -66,36 +61,30 @@ class GripperController(Node):
         self.set_finger_distance_srv = self.create_service(Float64Srv, '/gripper_control/set_finger_distance', self.set_finger_distance_callback, callback_group=blocking_callback_group)
         self.move_TCP_srv = self.create_service(Float64Srv, '/gripper_control/move_TCP', self.move_tcp_callback, callback_group=blocking_callback_group)
 
-        self.background_loop_period = 0.01 # 100 Hz
+        self.background_loop_period = 0.1 # 100 Hz
         # self.background_loop = self.create_timer(self.background_loop_period, self.background_loop)
 
-        print("Created service: \"/gripper_control/grip\"")
-        print("Created service: \"/gripper_control/set_finger_distance\"")
-        print("Created service: \"/gripper_control/move_TCP\"")
+
+        self.get_logger().debug("Created service: \"/gripper_control/grip\"")
+        self.get_logger().debug("Created service: \"/gripper_control/set_finger_distance\"")
+        self.get_logger().debug("Created service: \"/gripper_control/move_TCP\"")
 
         self.get_logger().info(f"{node_name} Node has been started!.")
 
+
     def background_loop(self):
-        pass
         # Check if present load is above threshold and stop if so
-        if np.any(self.present_load > self.load_threshold):
-            print("Load above threshold! Stopping motors.")
+        self.get_logger().debug(self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_LOAD))
+        present_load = np.array(self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_LOAD))
+        if present_load[0] == None or present_load[1] == None:
+            return
+        if np.any(present_load > self.safety_check_load_threshold):
+            self.get_logger().warn("Load above threshold! Stopping motors.")
             self.motors.disable_torque(self.motor_IDs)
 
-        # # Read and filter present load
-        # raw_load = np.array(self.motors.read(self.motor_IDs, CONTROL_TABLE.PRESENT_LOAD))
-        # if np.any(raw_load == None):
-        #     return
-        # # Apply Exponential Moving Average (first order low pass)
-        # self.present_load = (
-        #     self.filter_alpha * raw_load + 
-        #     (1.0 - self.filter_alpha) * self.present_load
-        # )
-
-    
 
     def loosen_grip(self):
-        print("Loosening grip")
+        self.get_logger().debug("Loosening grip")
         self.motors.disable_torque(self.motor_IDs)
         self.motors.write(self.motor_IDs, OPERATING_MODES.EXTENDED_POSITION_CONTROL_MODE, CONTROL_TABLE.OPERATING_MODE)
         self.motors.write(self.motor_IDs, self.speed_profile, CONTROL_TABLE.PROFILE_VELOCITY)
@@ -104,8 +93,7 @@ class GripperController(Node):
 
 
     def move_to_desired(self):
-        print(f"Desired tcp: {self.tcp_pos}")
-        print(f"Desired finger dist: {self.finger_distance}")
+        self.get_logger().debug(f"Move to desired tcp: {self.tcp_pos}, and finger distance: {self.finger_distance}")
 
         # Find finger positions
         desired_top_finger_pos = self.tcp_pos - 0.5*self.finger_distance
@@ -127,7 +115,7 @@ class GripperController(Node):
     
 
     def grip_callback(self, request, response):
-        print("grip:", request.data)
+        self.get_logger().debug(f"grip {request.data}")
 
         stop_gripping = not request.data
         
@@ -179,7 +167,7 @@ class GripperController(Node):
     
     
     def set_finger_distance_callback(self, request, response):
-        print("set finger distance to:", request.value)
+        self.get_logger().debug(f"set finger distance to: {request.value}")
 
         if self.is_grasping:
             self.loosen_grip()
@@ -191,7 +179,7 @@ class GripperController(Node):
             
 
     def move_tcp_callback(self, request, response):
-        print("move tcp to:", request.value)
+        self.get_logger().debug("move tcp to: {request.value}")
 
         if self.is_grasping:
             self.loosen_grip()
@@ -203,8 +191,8 @@ class GripperController(Node):
 
 
     def myexcepthook(self, type, value, tb):
-        print("CRASH BEHAVIOR BEGUN")
-        print("CRASH BEHAVIOR DONE")
+        self.get_logger().error("CRASH BEHAVIOR BEGUN")
+        self.get_logger().error("CRASH BEHAVIOR DONE")
 
 
 
