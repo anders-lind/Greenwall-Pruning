@@ -16,6 +16,7 @@ class DynamixelDriverNode(Node):
         self.motors = DynamixelSync()
 
         self.motor_IDs =[1, 2, 3, 4, 11, 12]
+        self.motors.setTurningDirection(motors=self.motor_IDs, directions=[-1,-1,1,1,1,-1])
 
         delivery_guarantee_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -66,9 +67,17 @@ class DynamixelDriverNode(Node):
             self.get_logger().warn("Could not fast read motor states")
 
     def motor_write(self, msg):
+        if len(msg.value) == 1:
+            values = np.ones(len(msg.motor_id))*msg.value[0]
+            self.motors.write(list(msg.motor_id), values.astype(int).tolist(), self.get_control_table_by_address(msg.control_type_address))
+            return
         self.motors.write(list(msg.motor_id), list(msg.value), self.get_control_table_by_address(msg.control_type_address))
 
     def motor_write_continous(self, msg):
+        if len(msg.value) == 1:
+            values = np.ones(len(msg.motor_id))*msg.value[0]
+            self.motors.write(list(msg.motor_id), values.astype(int).tolist(), self.get_control_table_by_address(msg.control_type_address))
+            return
         self.motors.write(list(msg.motor_id), list(msg.value), self.get_control_table_by_address(msg.control_type_address))
     
     def get_control_table_by_address(self, address: int) -> CONTROL_TABLE:      
