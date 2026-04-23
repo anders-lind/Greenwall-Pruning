@@ -15,7 +15,7 @@ class DynamixelDriverNode(Node):
         # Motor initialization
         self.motors = DynamixelSync()
 
-        self.motor_IDs =[1, 2, 3, 4, 11, 12]
+        self.motor_IDs =[1, 2, 3, 4, 12, 11]
         self.motors.setTurningDirection(motors=self.motor_IDs, directions=[-1,-1,1,1,1,-1])
 
         delivery_guarantee_qos = QoSProfile(
