@@ -117,45 +117,48 @@ class LeafDetectionNode(Node):
         if not self.leaf_detector_running or self.color_image.size == 0 or self.depth_image.size == 0 or self.current_pose is None or not self.info_received:
             return
 
-        # # Convert RGB image from Realsense to CIELAB
-        # img_lab = cv2.cvtColor(self.color_image, cv2.COLOR_RGB2LAB)
+        # Convert RGB image from Realsense to CIELAB
+        img_cielab = cv2.cvtColor(self.color_image, cv2.COLOR_RGB2LAB)
+        img_depth = self.depth_image.copy()
+        img_pose = self.current_pose.copy()
 
-        # # Get Seed Point
-        # seed_point = self.get_seed_point(img_lab)
-        # if seed_point is None:
-        #     return
-        # self.get_logger().info(f"Target found. Seed point: {seed_point}")
-
-        # # Check if seedpoint is a minimum amount of pixels from the border of the image, if so reject it
-        # min_border_dist = 100
-        # if np.any(seed_point < min_border_dist) or np.any(seed_point > self.camera_width - min_border_dist):
-        #     self.get_logger().info("Seed point too close to image border. Rejected.")
-        #     return
-
-        # # SAM 2 Segmentation around seed point (if found)
-        # sam2_segment_mask = self.run_sam2(seed_point)
-        # if sam2_segment_mask is None:
-        #     return
+        # Get Seed Point
+        seed_point = self.get_seed_point(img_cielab)
+        if seed_point is None:
+            return
+        self.get_logger().info(f"Target found. Seed point: {seed_point}")
         
-        # # SAM 2 mask verification 
-        # if not self.verify_mask(sam2_segment_mask, img_lab):
-        #     self.get_logger().info("SAM 2 mask rejected")
-        #     return
+
+        # Check if seedpoint is a minimum amount of pixels from the border of the image, if so reject it
+        min_border_dist = 100
+        if np.any(seed_point < min_border_dist) or np.any(seed_point > self.camera_width - min_border_dist):
+            self.get_logger().info("Seed point too close to image border. Rejected.")
+            return
+
+        # SAM 2 Segmentation around seed point (if found)
+        sam2_segment_mask = self.run_sam2(seed_point)
+        if sam2_segment_mask is None:
+            return
         
-        # # Online daptive reference color
-        # if self.adaptive_alpha > 0.0:
-        #     self.update_adaptive_mean(sam2_segment_mask, img_lab)
+        # SAM 2 mask verification 
+        if not self.verify_mask(sam2_segment_mask, img_cielab):
+            self.get_logger().info("SAM 2 mask rejected")
+            return
+        
+        # Online daptive reference color
+        if self.adaptive_alpha > 0.0:
+            self.update_adaptive_mean(sam2_segment_mask, img_cielab)
         
 
         # Make dummy segment mask for isolated testing
         # The dummy should be a parametrized circle at a specific location and radius
-        radius = 50
-        u,v = (100,100)
-        sam2_segment_mask = np.zeros((self.camera_height, self.camera_width), dtype=np.uint8)
-        cv2.circle(sam2_segment_mask, (u,v), radius, 255, -1)
+        # radius = 50
+        # u,v = (100,100)
+        # sam2_segment_mask = np.zeros((self.camera_height, self.camera_width), dtype=np.uint8)
+        # cv2.circle(sam2_segment_mask, (u,v), radius, 255, -1)
 
         # Compute 3D Pointcloud
-        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask)
+        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask, img_depth)
         if len(leaf_pc) == 0:
             return
         self.publish_pointcloud(leaf_pc)
@@ -170,8 +173,8 @@ class LeafDetectionNode(Node):
         if self.trigger_pruning_sequence_client.service_is_ready():
             req = CdprPos3D.Request()
             
-            req.x = float(self.current_pose[0] + dx)
-            req.y = float(self.current_pose[1] + dy)
+            req.x = float(img_pose[0] + dx)
+            req.y = float(img_pose[1] + dy)
             req.z = float(dz) 
             self.get_logger().info(f"Sending leaf pruning coordinates: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
             
@@ -250,9 +253,9 @@ class LeafDetectionNode(Node):
         else:
             self.get_logger().info(f"Drift limit reached ({drift_dist:.2f}). Ignored update.")
 
-    def get_leaf_pointcloud(self, mask):
+    def get_leaf_pointcloud(self, mask, img_depth):
         v_coords, u_coords = np.where(mask > 0)
-        z_values = self.depth_image[v_coords, u_coords].astype(float)
+        z_values = img_depth[v_coords, u_coords].astype(float)
         
         valid_indices = z_values > 0
         u = u_coords[valid_indices]
