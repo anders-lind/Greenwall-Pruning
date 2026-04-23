@@ -7,7 +7,7 @@ from sensor_msgs.msg import Joy
 import scipy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 from cdpr_control_pkg.DynamixelSyncDummy import DynamixelSyncDummy
-from plantwall_custom_interfaces.msg import CdprPose
+from plantwall_custom_interfaces.msg import CdprPose, MotorCmd
 from cdpr_control_pkg.cdpr_control_base_class import CDPRBaseControlNode
 
 
@@ -56,7 +56,7 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         cable_errors = np.array(desired_cable_lengths) - self.previous_cable_lengths # meters
 
         desired_cable_velocities = -(cable_errors / self.control_loop_period)
-        desired_spool_rpm = (desired_cable_velocities / self.spool_circumference) * 60 # convert to RPM
+        desired_spool_rpm = (desired_cable_velocities / self.effective_circumferences) * 60 # convert to RPM
 
         desired_motor_units = desired_spool_rpm / 0.229 # convert to motor units (1 unit = 0.229 RPM)
 
@@ -67,7 +67,7 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
             return
 
         # Prints
-        current_forces = self.motor_current_units_to_force(self.get_present_current())
+        current_forces = self.motor_current_units_to_force(self.present_current)
         self.get_logger().info(
             f"current_forces: ["
             f"{current_forces[0]:.2f}, {current_forces[1]:.2f},"
@@ -109,14 +109,9 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         #     throttle_duration_sec=0.2
         # )
         
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+        self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=velocity_int_list, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
-        self.motors.enable_torque(motors=[1,2,3,4])
-        self.motors.write(
-            motors=[1,2,3,4],
-            control_type=CONTROL_TABLE.GOAL_VELOCITY,
-            values=velocity_int_list
-        )
-        
         current_pose_msg.position = self.pose[0:2].tolist()
         current_pose_msg.orientation = self.pose[2]
         self.current_pose_publisher.publish(current_pose_msg)

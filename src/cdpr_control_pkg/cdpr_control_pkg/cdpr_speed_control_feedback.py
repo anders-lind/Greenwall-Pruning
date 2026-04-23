@@ -6,7 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 import scipy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
-from plantwall_custom_interfaces.msg import CdprPose
+from plantwall_custom_interfaces.msg import CdprPose, MotorCmd
 from cdpr_control_pkg.cdpr_control_base_class import CDPRBaseControlNode
 
 
@@ -15,6 +15,8 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         super().__init__('cdpr_speed_control')
 
     def command_robot(self):
+        
+
         current_pose_msg = CdprPose()
 
         # Get goal pose
@@ -141,12 +143,8 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         )
         
         # Write to motors
-        self.motors.enable_torque(motors=[1,2,3,4])
-        self.motors.write(
-            motors=[1,2,3,4],
-            control_type=CONTROL_TABLE.GOAL_VELOCITY,
-            values=velocity_int_list
-        )
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+        self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=velocity_int_list, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
         # Publish pose
         current_pose_msg.position = self.pose[0:2].tolist()

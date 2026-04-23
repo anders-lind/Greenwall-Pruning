@@ -3,10 +3,11 @@
 import rclpy
 import numpy as np
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Joy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE
 from cdpr_control_pkg.DynamixelSyncDummy import DynamixelSyncDummy
-from plantwall_custom_interfaces.msg import CdprPose
+from plantwall_custom_interfaces.msg import CdprPose, MotorCmd, MotorState
 import scipy
 import matplotlib.pyplot as plt
 import time
@@ -23,7 +24,30 @@ class CDPRBaseControlNode(Node):
         self.homing_loop_counter = 0
         self.control_loop_counter = 0
         self.last_buttons_state = None
-        self.control_loop_period = 0.02 # 50 Hz
+        self.control_loop_period = 0.05 # 20 Hz
+
+        self.motor_IDs = [1,2,3,4]
+
+        self.fast_callback_is_initialized = False
+        self.slow_callback_is_initialized = False
+        self.is_initialized = False
+
+        # Motor state variables
+        self.motor_id = None
+        self.operating_mode = None
+        self.homing_offset = None
+        self.current_limit = None
+        self.velocity_limit = None
+        self.torque_enable = None
+        self.goal_current = None
+        self.goal_velocity = None
+        self.profile_velocity = None
+        self.goal_position = None
+        self.moving = None
+        self.present_load = None
+        self.present_current = None
+        self.present_velocity = None
+        self.present_position = None
 
         # Homing parameters
         self.homing_speed = int(10) # Motor units [0.229 RPM]
@@ -82,29 +106,36 @@ class CDPRBaseControlNode(Node):
         self.filter_alpha = 1.0 # Smoothing factor for encoders
         self.motor_feedback_period = 0.01 # 100 Hz
         
+        # Old initial_pose
+        # self.initial_pose = np.array([self.CDPR_width/2, 0.52-0.03, 0.0]) # (x, y, theta)
+
+
         # State variables
-        self.initial_pose = np.array([self.CDPR_width/2, 0.52-0.03, 0.0]) # (x, y, theta)
+        self.initial_pose = np.array([0.45, 0.607, 0.0])
         self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.pose = self.initial_pose.copy()
         self.target_pose = self.initial_pose.copy() # (x, y, theta)
         self.previous_pose = self.initial_pose.copy() # (x, y, theta)
-
-        # Motor initialization
-        self.motors = DynamixelSync()
-        self.motors.setTurningDirection(motors=[1,2,3,4], directions=[-1,-1,1,1])
-        self.motors.disable_torque(motors=[1,2,3,4])
-        # self.motors.write(motors=[1,2,3,4], values=128, control_type=CONTROL_TABLE.VELOCITY_LIMIT)
-        self.motors.write(motors=[1,2,3,4], values=1, control_type=CONTROL_TABLE.OPERATING_MODE)
-        self.motors.enable_torque(motors=[1,2,3,4])
         
         # Initialize Logic
-        self.initialize_state()
+        # self.initialize_state()
 
-        # ROS Infrastructure
+        # ROS publishers
         self.current_pose_publisher = self.create_publisher(CdprPose, '/cdpr/current_pose', 10)
 
+        delivery_guarantee_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_ALL
+        )
+        self.motor_write_publisher = self.create_publisher(MotorCmd, '/dynamixel_driver/motor_cmd', delivery_guarantee_qos)
+        self.motor_write_continous_publisher = self.create_publisher(MotorCmd, '/dynamixel_driver/motor_cmd_continous', 10)
+
+        # ROS subscribers
         self.joy_subscriber = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
         self.goto_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/goto_pose', self.goto_pose_callback, 10)
+        
+        self.motor_state_subscriber_slow = self.create_subscription(MotorState, '/dynamixel_driver/motor_state_slow', self.motor_state_slow_callback, 10)
+        self.motor_state_subscriber_fast = self.create_subscription(MotorState, '/dynamixel_driver/motor_state_fast', self.motor_state_fast_callback, 10)
         
         self.control_timer = self.create_timer(self.control_loop_period, self.command_robot)
         self.control_timer.cancel()
@@ -112,19 +143,25 @@ class CDPRBaseControlNode(Node):
         self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.filtered_cable_lengths)
 
         # Crash behavior
-        sys.excepthook = self.myexcepthook
+        # sys.excepthook = self.myexcepthook
 
         self.get_logger().info(f"{node_name} Node has been started.")
     
     def __del__(self):
         print("CDPRBaseControlNode destructor")
     
-    def myexcepthook(self, type, value, tb):
-        print("CRASH BEHAVIOR BEGUN")
-        self.motors.disable_torque([1,2,3,4])
-        print("CRASH BEHAVIOR DONE")
+    # def myexcepthook(self, type, value, tb):
+    #     print("CRASH BEHAVIOR BEGUN")
+    #     self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+    #     print("CRASH BEHAVIOR DONE")
 
     def initialize_state(self):
+        # Motor initialization
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.OPERATING_MODE.value[0]))
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[128,128,128,128], control_type_address=CONTROL_TABLE.VELOCITY_LIMIT.value[0]))
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+
         # Assume robot starts at center or user manually centered it
         self.pose = self.initial_pose.copy()
         self.previous_pose = self.initial_pose.copy()
@@ -138,11 +175,10 @@ class CDPRBaseControlNode(Node):
         self.previous_cable_lengths = np.array(self.initial_cable_lengths)
         
         # Zero the encoders at this position
-        self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
-        while np.any(np.array(self.zero_offsets) == None):
-            print("Could not read zero offsets")
-            self.zero_offsets = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        self.zero_offsets = self.present_position.copy()
 
+        self.is_initialized = True
+        self.get_logger().info("CDPR State Initialized and ready for commands.")
     
     def joy_callback(self, msg: Joy):
         self.handle_button_events(msg.buttons)
@@ -159,6 +195,41 @@ class CDPRBaseControlNode(Node):
         target_pos = msg.position
         target_ori = msg.orientation
         self.target_pose = np.array([target_pos[0], target_pos[1], target_ori])
+
+    def motor_state_slow_callback(self, msg: MotorState):
+        motor_ids_full = np.array(msg.motor_id)
+        indices = [np.where(motor_ids_full == id)[0][0] for id in self.motor_IDs]
+
+        self.motor_ids = motor_ids_full[indices]
+        self.operating_mode = np.array(msg.operating_mode)[indices]
+        self.homing_offset = np.array(msg.homing_offset)[indices]
+        self.current_limit = np.array(msg.current_limit)[indices]
+        self.velocity_limit = np.array(msg.velocity_limit)[indices]
+        self.goal_current = np.array(msg.goal_current)[indices]
+        self.torque_enable = np.array(msg.torque_enable)[indices]
+        self.goal_velocity = np.array(msg.goal_velocity)[indices]
+        self.profile_velocity = np.array(msg.profile_velocity)[indices]
+        self.goal_position = np.array(msg.goal_position)[indices]
+        self.moving = np.array(msg.moving)[indices]
+
+        if not self.slow_callback_is_initialized:
+            self.slow_callback_is_initialized = True
+
+    def motor_state_fast_callback(self, motor_state_msg: MotorState):
+        motor_ids_full = np.array(motor_state_msg.motor_id)
+        indices = [np.where(motor_ids_full == id)[0][0] for id in self.motor_IDs]
+
+        self.present_current = np.array(motor_state_msg.present_current)[indices]
+        self.present_position = np.array(motor_state_msg.present_position)[indices]
+
+        if self.is_initialized:
+            return
+
+        if not self.fast_callback_is_initialized:
+            self.fast_callback_is_initialized = True
+        
+        if self.fast_callback_is_initialized and self.slow_callback_is_initialized:
+            self.initialize_state()
         
     def command_robot(self):
         print("Base Command_robot() call")
@@ -168,7 +239,7 @@ class CDPRBaseControlNode(Node):
             self.homing_loop_counter += 1
 
             # Begin tightening tensions
-            present_current_list = self.get_present_current()
+            present_current_list = self.present_current
             force_list = self.motor_current_units_to_force(present_current_list)
             tigthen_array = [0,0,0,0]
             not_tightened = False
@@ -185,21 +256,13 @@ class CDPRBaseControlNode(Node):
                 else:
                     tigthen_array[i] = 0
                 print(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
-            self.motors.enable_torque(motors=[1,2,3,4])
-            self.motors.write(
-                motors=[1,2,3,4],
-                control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                values=tigthen_array
-            )
+            self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+            self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=tigthen_array, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
             # When all cables reach the desired tension, stop tightening and reinitialize state
             if not not_tightened:
                 self.homing_active = False
-                self.motors.write(
-                    motors=[1,2,3,4],
-                    control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                    values=[0,0,0,0]
-                )
+                self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
                 self.initialize_state()
                 self.homing_loop_counter = 0
                 self.get_logger().info('Homing complete.')
@@ -207,38 +270,22 @@ class CDPRBaseControlNode(Node):
             return
 
     def tension_safety_check(self):
-        current_forces = self.motor_current_units_to_force(self.get_present_current())
+        current_forces = self.motor_current_units_to_force(self.present_current)
         if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
-            self.motors.disable_torque(motors=[1,2,3,4])
-            self.motors.write(
-                motors=[1,2,3,4],
-                control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                values=[0,0,0,0]
-            )
+
+            self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+            self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
+
             self.control_timer.cancel()
             self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
             return False
         
         return True
-        
-    def tension_safety_check_advanced(self):
-        return
-        #TODO: Make this
-        current_forces = self.motor_current_units_to_force(self.get_present_current())
-        delta_thresholds = self.tension_thresholds - current_forces
-
-        tension_reached = False
-        for i in range(len(delta_thresholds)):
-            if delta_thresholds[i] <= 0:
-                tension_reached = True
-
-        if ((np.any(delta_thresholds)) and (self.control_loop_counter > 10)):
-            self.motors.disable_torque(motors=[1,2,3,4])
-            self.control_timer.cancel()
-            self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
-            return
 
     def filtered_cable_lengths(self):   
+        if not self.is_initialized:
+            return
+
         raw_lengths = self.get_current_cable_lengths()
         
         if np.any(raw_lengths == None):
@@ -251,7 +298,7 @@ class CDPRBaseControlNode(Node):
         )
 
     def get_current_cable_lengths(self):
-        positions = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_POSITION)
+        positions = self.present_position.copy()
         positions = np.array(positions)
 
         if np.any(positions == None):
@@ -263,16 +310,6 @@ class CDPRBaseControlNode(Node):
         current_cable_lengths[0:2] = current_cable_lengths[0:2] + motor_encoder_rotations[0:2] * self.spool_pitch # Negative correction for winch box vertical travel
         current_cable_lengths[2:4] = current_cable_lengths[2:4] - motor_encoder_rotations[2:4] * self.spool_pitch # Positive corrention for winch box vertical travel
         return current_cable_lengths
-
-    def get_present_current(self):
-        currents_list = self.motors.read(motors=[1,2,3,4], control_type=CONTROL_TABLE.PRESENT_CURRENT)
-        currents_list = np.array(currents_list)
-
-        if np.any(currents_list == None):
-            self.motors.disable_torque(motors=[1,2,3,4])
-            print("ERROR: Could not read currents!")
-
-        return currents_list
 
     def force_to_current(self, force_vector):
         torque_vector = force_vector * self.spool_radius
@@ -377,7 +414,7 @@ class CDPRBaseControlNode(Node):
             # Activate CDPR
             if self.control_timer.is_canceled():
                 self.control_timer.reset()
-                self.motors.enable_torque(motors=[1,2,3,4])
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.get_logger().info('Control loop STARTED.')
 
         # Button B (rising edge)
@@ -385,17 +422,13 @@ class CDPRBaseControlNode(Node):
             # Deactivate CDPR
             if not self.control_timer.is_canceled():
                 self.control_timer.cancel()
-                self.motors.disable_torque(motors=[1,2,3,4])
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.get_logger().info('Control loop STOPPED.')
             # Stop homing procedure
             if self.homing_active:
                 self.homing_active = False
-                self.motors.write(
-                    motors=[1,2,3,4],
-                    control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                    values=[0,0,0,0]
-                )
-                self.motors.disable_torque(motors=[1,2,3,4])
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.homing_loop_counter = 0
                 self.get_logger().info('Homing loop STOPPED.')
 
@@ -404,21 +437,15 @@ class CDPRBaseControlNode(Node):
             # Release cables for homing (only when cdpr control loop is inactive)
             if self.control_timer.is_canceled():
                 release_speed = -self.homing_speed
-                self.motors.enable_torque(motors=[1,2,3,4])
-                self.motors.write(
-                    motors=[1,2,3,4],
-                    control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                    values=[release_speed,release_speed,release_speed,release_speed]
-                )
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+                self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[release_speed], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
+
+
 
         # Button X (falling edge)
         if current_buttons[2] == 0 and self.last_buttons_state[2] == 1:
             # Stop cable release
-            self.motors.write(
-                motors=[1,2,3,4],
-                control_type=CONTROL_TABLE.GOAL_VELOCITY,
-                values=[0,0,0,0]
-            )
+            self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
         # Button Y (rising edge)
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
