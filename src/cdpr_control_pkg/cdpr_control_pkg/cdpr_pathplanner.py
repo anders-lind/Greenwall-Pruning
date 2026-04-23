@@ -107,6 +107,11 @@ class CDPRPathplannerNode(Node):
                 self.resume_pos = self.current_pose[0:2].copy()
                 self.needs_to_resume = True
                 
+                goto_pose_msg = CdprPose()
+                goto_pose_msg.position = self.resume_pos.tolist()
+                goto_pose_msg.orientation = self.current_pose[2]
+                self.goto_pose_publisher.publish(goto_pose_msg)
+                
         response.success = True
         return response
     
