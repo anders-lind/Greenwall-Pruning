@@ -5,7 +5,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import Joy
 import scipy
 from cdpr_control_pkg.DynamixelSync import DynamixelSync, CONTROL_TABLE, OPERATING_MODES
-from plantwall_custom_interfaces.msg import MotorCmd
+from plantwall_custom_interfaces.msg import MotorCmd, MotorState
 
 
 class CDPRManualHomingNode(Node):
@@ -15,7 +15,7 @@ class CDPRManualHomingNode(Node):
         self.velocity = 0
         self.last_buttons_state = None
         self.is_initialized = False
-        
+
         delivery_guarantee_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_ALL
@@ -24,6 +24,9 @@ class CDPRManualHomingNode(Node):
         self.motor_write_continous_publisher = self.create_publisher(MotorCmd, '/dynamixel_driver/motor_cmd_continous', 10)
         self.control_timer = self.create_timer(1, self.background_tasks)
         self.joy_subscriber = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
+
+        self.motor_state_subscriber_fast = self.create_subscription(MotorState, '/dynamixel_driver/motor_state_fast', self.motor_state_fast_callback, 10)
+
 
     def background_tasks(self):
         if not self.is_initialized:
@@ -34,6 +37,13 @@ class CDPRManualHomingNode(Node):
             self.get_logger().info("CDPR State Initialized and ready for commands.")
             self.is_initialized = True
 
+    def motor_state_fast_callback(self, motor_state_msg: MotorState):
+        motor_ids_full = np.array(motor_state_msg.motor_id)
+        indices = [np.where(motor_ids_full == id)[0][0] for id in [1,2,3,4]]
+
+        present_current = np.array(motor_state_msg.present_current)[indices]
+        self.get_logger().info(f"Present current: {present_current}")
+        # present_position = np.array(motor_state_msg.present_position)[indices]
 
     def joy_callback(self, msg: Joy):
         self.handle_button_events(msg.buttons)

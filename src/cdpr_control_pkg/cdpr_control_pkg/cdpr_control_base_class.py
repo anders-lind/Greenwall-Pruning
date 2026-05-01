@@ -56,7 +56,7 @@ class CDPRBaseControlNode(Node):
         self.homing_loop_period = self.control_loop_period
 
         # Tension safety check parameters
-        self.tension_threshold = 40.0 # Newton (40)
+        self.tension_threshold = 60.0 # Newton (without spring: 40)
         self.tension_thresholds = [self.tension_threshold, self.tension_threshold, self.tension_threshold, self.tension_threshold] # Newton
 
         # CDPR parameters
@@ -84,19 +84,33 @@ class CDPRBaseControlNode(Node):
         self.B3 = np.array([self.CDPR_width, 0])
         self.B4 = np.array([0, 0])
 
-        self.q1 = np.array([-0.0433,  0.0242]) 
-        self.q2 = np.array([ 0.0639,  0.0242])
-        self.q3 = np.array([ 0.0639, -0.1358])
-        self.q4 = np.array([-0.0433, -0.1358])
 
-        # Old
+        # Springs v1 (long black sinusoidal ones)
+        # self.q1 = np.array([-0.14,0.03])
+        # self.q2 = np.array([0.14,0.0375])
+        # self.q3 = np.array([0.125,-0.155])
+        # self.q4 = np.array([-0.1225,-0.1525])
+
+        # Springs v2 (small green harmonica ones)
+        self.q1 = np.array([-0.09,0.0])
+        self.q2 = np.array([0.09,0.0])
+        self.q3 = np.array([0.09,-0.11])
+        self.q4 = np.array([-0.09,-0.11])
+
+        # New EE pre spring q-vectors
+        # self.q1 = np.array([-0.0433,  0.0242]) 
+        # self.q2 = np.array([ 0.0639,  0.0242])
+        # self.q3 = np.array([ 0.0639, -0.1358])
+        # self.q4 = np.array([-0.0433, -0.1358])
+
+        # Old EE
         # self.q1 = np.array([-self.end_effector_width/2, self.end_effector_height/2])
         # self.q2 = np.array([self.end_effector_width/2, self.end_effector_height/2])
         # self.q3 = np.array([self.end_effector_width/2, -self.end_effector_height/2])
         # self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
 
         # CONTROLLER GAINS
-        self.movement_speed = 0.01 # m/s
+        self.movement_speed = 0.03 # m/s
         self.rotation_speed = 0.1 # rad/s
         self.stopping_radius_pos = 1e-3 # m
         self.slowdown_radius_pos = 0.01 # m
@@ -157,9 +171,16 @@ class CDPRBaseControlNode(Node):
 
     def initialize_state(self):
         # Motor initialization
+        # Torque off
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+
+        # Motor setting
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.OPERATING_MODE.value[0]))
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[128,128,128,128], control_type_address=CONTROL_TABLE.VELOCITY_LIMIT.value[0]))
+        a_max = 1000 
+
+        self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[a_max], control_type_address=CONTROL_TABLE.PROFILE_ACCELERATION.value[0]))
+        # Torque back on
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
 
         # Assume robot starts at center or user manually centered it

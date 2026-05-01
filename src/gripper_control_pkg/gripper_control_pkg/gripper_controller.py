@@ -22,7 +22,8 @@ class GripperController(Node):
         self.grasp_speed = 5
         self.grasp_force = 200
         self.is_grasping = False
-        self.speed_profile = 60
+        self.speed_profile = 120 # 0.229 [rev/min]
+        self.acc_profile = 10 # 214.577 [rev/min2]
         self.is_initialized = False
         self.fast_callback_is_initialized = False
         self.slow_callback_is_initialized = False
@@ -133,6 +134,7 @@ class GripperController(Node):
         self.motor_write_publisher.publish(MotorCmd(motor_id=self.motor_IDs, value=[0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
         self.motor_write_publisher.publish(MotorCmd(motor_id=self.motor_IDs, value=[OPERATING_MODES.EXTENDED_POSITION_CONTROL_MODE], control_type_address=CONTROL_TABLE.OPERATING_MODE.value[0]))
         self.motor_write_publisher.publish(MotorCmd(motor_id=self.motor_IDs, value=[self.speed_profile], control_type_address=CONTROL_TABLE.PROFILE_VELOCITY.value[0]))
+        self.motor_write_publisher.publish(MotorCmd(motor_id=self.motor_IDs, value=[self.acc_profile], control_type_address=CONTROL_TABLE.PROFILE_ACCELERATION.value[0]))
         initial_motor_pos = self.present_position.copy()
         initial_homing_offset = self.homing_offset.copy()
         self.motor_write_publisher.publish(MotorCmd(motor_id=self.motor_IDs, value=[initial_homing_offset[0]-initial_motor_pos[0], initial_homing_offset[1]-initial_motor_pos[1]], control_type_address=CONTROL_TABLE.HOMING_OFFSET.value[0]))
@@ -183,9 +185,13 @@ class GripperController(Node):
 
 
         # Wait for motors to reach the desired positions and stop
+        present_load = self.present_load.copy()
+        self.get_logger().info(f"Move to desired present load: {present_load}")
         time.sleep(0.4) # Wait for the motors to start the movement
         moving_top, moving_bot = self.moving
         while (moving_top or moving_bot):
+            present_load = self.present_load.copy()
+            self.get_logger().info(f"Move to desired loop Present load: {present_load}")
             moving_top, moving_bot = self.moving
             time.sleep(0.01) # Do not burn the CPU
     
@@ -223,6 +229,7 @@ class GripperController(Node):
         while (not grasp_force_exceeded):
             # get present load
             present_load = self.present_load.copy()
+            self.get_logger().info(f"Grip Present load: {present_load}")
 
             # Stop each motor as they reach desired grasp force
             move_top_motor = False
