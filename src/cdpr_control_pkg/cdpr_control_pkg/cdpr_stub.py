@@ -13,7 +13,7 @@ class CDPRStubNode(Node):
         self.CDPR_width = 0.908
         self.CDPR_height = 0.944
         
-        self.current_pos = np.array([self.CDPR_width/2.0, self.CDPR_height/2.0])
+        self.current_pos = np.array([self.CDPR_width/2.0, 0.545-0.03])
         self.current_ori = 0.0  
         
         self.target_pos = self.current_pos.copy()

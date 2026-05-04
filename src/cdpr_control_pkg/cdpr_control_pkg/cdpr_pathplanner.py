@@ -24,15 +24,16 @@ class CDPRPathplannerNode(Node):
         self.get_logger().info("CDPR Pathplanner Node has been started")
 
         # System parameters
-        self.end_effector_height = 0.03916
-        self.end_effector_width = 0.09322
+        # self.end_effector_height = 0.039161
+        self.end_effector_top_margin = 0.03
+        self.end_effector_bottom_margin = 0.13
+        self.end_effector_width = 0.22
         self.CDPR_height = 0.944
         self.CDPR_width = 0.908
         
         # Auxiliary poses
-        self.initial_pos = np.array([self.CDPR_width/2, 0.52-0.03])
+        self.initial_pos = np.array([self.CDPR_width/2, 0.545-0.03])
         self.clear_homing_stick = self.initial_pos + np.array([0.0, 0.05])
-        self.center_pos = np.array([self.CDPR_width/2, self.CDPR_height/2])
         
         # State variables
         self.current_pose = None
@@ -50,7 +51,7 @@ class CDPRPathplannerNode(Node):
         self.pathplanner_loop_period = 0.02
 
         # Startup sequence variables
-        self.startup_poses = [self.initial_pos, self.clear_homing_stick]
+        self.startup_poses = [self.clear_homing_stick]
         self.startup_idx = 0
         self.has_exited_homing = False
 
@@ -61,7 +62,6 @@ class CDPRPathplannerNode(Node):
             self.get_logger().info(f"Successfully loaded {len(self.poselist)} offline waypoints.")
         except Exception as e:
             self.get_logger().error(f"Failed to load path file: {e}. Falling back to default center pose.")
-            self.poselist = np.array([self.center_pos]) # Safe fallback
 
         # # Path poselist
         # self.poselist = [
@@ -130,8 +130,8 @@ class CDPRPathplannerNode(Node):
                 if distance < self.smoothing_radius:
                     break
                 # If target_pos is outside of CDPR workspace. 
-                min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
-                max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
+                min_pos = np.array([self.end_effector_width/2.0, self.end_effector_bottom_margin])
+                max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_top_margin])
                 clipped_target_pos = np.clip(target_pos, min_pos, max_pos)
                 clipped_distance = np.linalg.norm(self.current_pose[0:2] - clipped_target_pos)
                 if clipped_distance < self.smoothing_radius:
@@ -203,8 +203,8 @@ class CDPRPathplannerNode(Node):
         # 3. GOTO state logic bypasses the search targets 
 
         # Clip position and orienation to safe limits
-        min_pos = np.array([self.end_effector_width/2.0, self.end_effector_height/2.0])
-        max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_height / 2.0])
+        min_pos = np.array([self.end_effector_width/2.0, self.end_effector_bottom_margin])
+        max_pos = np.array([self.CDPR_width - self.end_effector_width / 2.0, self.CDPR_height - self.end_effector_top_margin])
         safe_pos = np.clip(self.active_target_pos, min_pos, max_pos)
 
         abs_max_ori = 0.3

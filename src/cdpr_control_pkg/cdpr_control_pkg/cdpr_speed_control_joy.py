@@ -31,10 +31,8 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         delta_pos_norm = np.linalg.norm(delta_pos_unscaled)
         if delta_pos_norm < 1e-6:
             delta_pos = np.array([0.0, 0.0])
-        elif delta_pos_norm < 0.01:
-            delta_pos = delta_pos_unscaled
         else:
-            delta_pos = delta_pos_unscaled/delta_pos_norm
+            delta_pos = delta_pos_unscaled
 
         # Pose estimation with integration
         self.pose[0:2] = self.pose[0:2] + delta_pos * self.movement_speed * self.control_loop_period
@@ -67,13 +65,13 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
             return
 
         # Prints
-        current_forces = self.motor_current_units_to_force(self.present_current)
-        self.get_logger().info(
-            f"current_forces: ["
-            f"{current_forces[0]:.2f}, {current_forces[1]:.2f},"
-            f"{current_forces[2]:.2f}, {current_forces[3]:.2f}],",
-            throttle_duration_sec=0.2
-        )
+        # current_forces = self.motor_current_units_to_force(self.present_current)
+        # self.get_logger().info(
+        #     f"current_forces: ["
+        #     f"{current_forces[0]:.2f}, {current_forces[1]:.2f},"
+        #     f"{current_forces[2]:.2f}, {current_forces[3]:.2f}],",
+        #     throttle_duration_sec=0.2
+        # )
         # self.get_logger().info(
         #     f"self.pose: ["
         #     f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
@@ -105,7 +103,7 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         #     throttle_duration_sec=0.2
         # )
         # self.get_logger().info(
-        #     f"-----------------------------------------------",
+        #     f"-----------------------------------------------",   
         #     throttle_duration_sec=0.2
         # )
         
@@ -118,7 +116,6 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
 
         # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
-        self.control_loop_counter += 1
 
 def main(args=None):
     rclpy.init(args=args)

@@ -21,8 +21,6 @@ class CDPRBaseControlNode(Node):
 
         # Node state variables
         self.homing_active = False
-        self.homing_loop_counter = 0
-        self.control_loop_counter = 0
         self.last_buttons_state = None
         self.control_loop_period = 0.05 # 20 Hz
 
@@ -31,6 +29,9 @@ class CDPRBaseControlNode(Node):
         self.fast_callback_is_initialized = False
         self.slow_callback_is_initialized = False
         self.is_initialized = False
+
+        self.auto_tighten_active = False
+        self.cable_lengths_pre_tightened = None
 
         # Motor state variables
         self.motor_id = None
@@ -51,13 +52,17 @@ class CDPRBaseControlNode(Node):
 
         # Homing parameters
         self.homing_speed = int(10) # Motor units [0.229 RPM]
-        self.home_tension = 5 # Newton
+        self.home_tension = 10 # Newton
         self.force_tension_time = 0.0 # S Old=0.1
         self.homing_loop_period = self.control_loop_period
+        self.auto_tighten_loop_period = self.control_loop_period
+        self.auto_tighten_activate_loop_period = 60.0 # S
 
+
+        self.auto_tighten_tension = self.home_tension
         # Tension safety check parameters
-        self.tension_threshold = 60.0 # Newton (without spring: 40)
-        self.tension_thresholds = [self.tension_threshold, self.tension_threshold, self.tension_threshold, self.tension_threshold] # Newton
+        self.max_tension_threshold = 60.0 # Newton (without spring: 40)
+        self.tension_thresholds = [self.max_tension_threshold, self.max_tension_threshold, self.max_tension_threshold, self.max_tension_threshold] # Newton
 
         # CDPR parameters
         self.spool_radius = 0.0115 - 0.001 # spool outer radius minus cable radius
@@ -110,7 +115,7 @@ class CDPRBaseControlNode(Node):
         # self.q4 = np.array([-self.end_effector_width/2, -self.end_effector_height/2])
 
         # CONTROLLER GAINS
-        self.movement_speed = 0.03 # m/s
+        self.movement_speed = 0.02 # m/s
         self.rotation_speed = 0.1 # rad/s
         self.stopping_radius_pos = 1e-3 # m
         self.slowdown_radius_pos = 0.01 # m
@@ -125,7 +130,7 @@ class CDPRBaseControlNode(Node):
 
 
         # State variables
-        self.initial_pose = np.array([0.45, 0.607, 0.0])
+        self.initial_pose = np.array([0.45, 0.545-0.03, 0.0])
         self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.pose = self.initial_pose.copy()
         self.target_pose = self.initial_pose.copy() # (x, y, theta)
@@ -154,6 +159,9 @@ class CDPRBaseControlNode(Node):
         self.control_timer = self.create_timer(self.control_loop_period, self.command_robot)
         self.control_timer.cancel()
         self.homing_timer = self.create_timer(self.homing_loop_period, self.homing)
+        self.auto_tighten_timer = self.create_timer(self.auto_tighten_loop_period, self.auto_tighten_cables)
+        self.auto_tighten_activate_timer = self.create_timer(self.auto_tighten_activate_loop_period, self.auto_tighten_cables_activate)
+        self.auto_tighten_activate_timer.cancel()
         self.motor_feedback_timer = self.create_timer(self.motor_feedback_period, self.filtered_cable_lengths)
 
         # Crash behavior
@@ -257,26 +265,19 @@ class CDPRBaseControlNode(Node):
 
     def homing(self):
         if self.homing_active:
-            self.homing_loop_counter += 1
-
             # Begin tightening tensions
             present_current_list = self.present_current
             force_list = self.motor_current_units_to_force(present_current_list)
             tigthen_array = [0,0,0,0]
             not_tightened = False
             for i in range(4):
-                # Only check tension after 0.1s
-                if (self.homing_loop_counter * self.homing_loop_period <= self.force_tension_time):
-                    tigthen_array = [self.homing_speed, self.homing_speed, self.homing_speed, self.homing_speed]
-                    not_tightened = True
-                    print(f"Slow start tensioning: {force_list[0]:.2f}, {force_list[1]:.2f}, {force_list[2]:.2f}, {force_list[3]:.2f}, ")
-                    break
-                elif (force_list[i] < self.home_tension):
+                if (force_list[i] < self.home_tension):
                     tigthen_array[i] = self.homing_speed
                     not_tightened = True
                 else:
                     tigthen_array[i] = 0
-                print(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
+                self.get_logger().info(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
+                # print(f"force {i+1} is {force_list[i]:.2f}N, < desired {self.home_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
             self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
             self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=tigthen_array, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
@@ -285,20 +286,74 @@ class CDPRBaseControlNode(Node):
                 self.homing_active = False
                 self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
                 self.initialize_state()
-                self.homing_loop_counter = 0
                 self.get_logger().info('Homing complete.')
 
+            return
+        
+    def auto_tighten_cables_activate(self):
+        if self.homing_active:
+            self.get_logger().info("Blocked auto tighten request since system is homing")
+            return
+        
+        if self.control_timer.is_canceled():
+            return
+
+        self.auto_tighten_active = True
+        self.get_logger().info("Auto tighten started")
+        self.cable_lengths_pre_tightened = self.cable_lengths.copy()
+        self.auto_tighten_activate_timer.cancel()
+
+    def auto_tighten_cables(self):
+
+        if self.auto_tighten_active:
+            if not self.control_timer.is_canceled():
+                self.control_timer.cancel()
+            current_forces = self.motor_current_units_to_force(self.present_current)            
+            # Begin tightening tensions
+            tigthen_array = [0,0,0,0]
+            not_tightened = False
+            for i in range(4):
+                if (current_forces[i] < self.auto_tighten_tension):
+                    tigthen_array[i] = self.homing_speed
+                    not_tightened = True
+                else:
+                    tigthen_array[i] = 0
+                # self.get_logger().info(f"force {i+1} is {current_forces[i]:.2f}N, < desired {self.auto_tighten_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}", throttle_duration_sec=0.2)
+                # print(f"force {i+1} is {current_forces[i]:.2f}N, < desired {self.auto_tighten_tension}N,  {"tightening..." if tigthen_array[i] != 0 else ""}")
+            # self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
+            self.get_logger().info(f"Current forces: {current_forces}, desired tension: {self.auto_tighten_tension}N", throttle_duration_sec=0.2)
+            self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=tigthen_array, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
+
+            # When all cables reach the desired tension, stop tightening
+            if not not_tightened:
+                self.get_logger().info('Auto tightening complete.')
+                self.auto_tighten_active = False
+
+                # Adjusted cable length logic
+                self.initial_cable_lengths -= self.cable_lengths - self.cable_lengths_pre_tightened
+
+
+
+                if self.control_timer.is_canceled():
+                    self.control_timer.reset()
+                    # self.get_logger().info("Control loop restarted")
+                if self.auto_tighten_activate_timer.is_canceled():
+                    self.auto_tighten_activate_timer.reset()
+                    # self.get_logger().info("Auto tighten activate timer restarted")
             return
 
     def tension_safety_check(self):
         current_forces = self.motor_current_units_to_force(self.present_current)
-        if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
+        if (np.any(current_forces > self.max_tension_threshold)):
 
             self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
             self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
 
             self.control_timer.cancel()
-            self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
+            self.auto_tighten_activate_timer.cancel()
+            self.auto_tighten_active = False
+
+            self.get_logger().warn(f"Tension threshold ({self.max_tension_threshold} N) exceeded! Current forces: {current_forces}")
             return False
         
         return True
@@ -390,7 +445,7 @@ class CDPRBaseControlNode(Node):
             MSE = MSE/4
             return MSE
         
-        margin = 0.05
+        margin = 0.0 #0.05
         limit_theta = 0.3 # ~17 degrees
         bnds = (
             (margin, self.CDPR_width - margin), 
@@ -437,6 +492,9 @@ class CDPRBaseControlNode(Node):
                 self.control_timer.reset()
                 self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.get_logger().info('Control loop STARTED.')
+            if self.auto_tighten_activate_timer.is_canceled():
+                self.auto_tighten_activate_timer.reset()
+
 
         # Button B (rising edge)
         if current_buttons[1] == 1 and self.last_buttons_state[1] == 0:
@@ -445,12 +503,14 @@ class CDPRBaseControlNode(Node):
                 self.control_timer.cancel()
                 self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.get_logger().info('Control loop STOPPED.')
+            # Stop auto tighten system
+            if not self.auto_tighten_activate_timer.is_canceled():
+                self.auto_tighten_activate_timer.cancel()
             # Stop homing procedure
             if self.homing_active:
                 self.homing_active = False
                 self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
                 self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[0,0,0,0], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
-                self.homing_loop_counter = 0
                 self.get_logger().info('Homing loop STOPPED.')
 
         # Button X (rising edge)
@@ -472,8 +532,11 @@ class CDPRBaseControlNode(Node):
         if current_buttons[3] == 1 and self.last_buttons_state[3] == 0:
             # Start homing procedure (only when cdpr control loop is inactive)
             if self.control_timer.is_canceled():
-                self.homing_active = True
-                self.get_logger().info('Homing started.')
+                if not self.auto_tighten_active:
+                    self.homing_active = True
+                    self.get_logger().info('Homing started.')
+                else:
+                    self.get_logger().info('Can not home since system has auto tighten active')
 
         # Button LB (rising edge)
         if current_buttons[4] == 1 and self.last_buttons_state[4] == 0:

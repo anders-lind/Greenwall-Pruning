@@ -68,6 +68,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
 
         # Feedforward Velocity (The speed required just to execute the movement)
         ff_velocities = -(desired_cable_lengths - current_ideal_lengths) / self.control_loop_period
+        # ff_velocities = -(desired_cable_lengths - self.cable_lengths) / self.control_loop_period
 
         # 2. Feedback: Correcting sensor error
         # Compare where the cables SHOULD be right now vs. where the encoders say they ARE
@@ -86,12 +87,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         velocity_int_list = [int(v) for v in desired_motor_units]
 
         # # Tension safety check
-        # current_forces = self.motor_current_units_to_force(self.get_present_current())
-        # if ((np.any(current_forces > self.tension_threshold)) and (self.control_loop_counter > 10)):
-        #     self.motors.disable_torque(motors=[1,2,3,4])
-        #     self.control_timer.cancel()
-        #     self.get_logger().warn(f"Tension threshold ({self.tension_threshold} N) exceeded! Current forces: {current_forces}")
-        #     return
+        current_forces = self.motor_current_units_to_force(self.present_current)
         
 
         # Tension safety check
@@ -137,14 +133,15 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         #     f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, {desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
         #     throttle_duration_sec=0.2
         # )
-        self.get_logger().info(
-            f"-----------------------------------------------",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"-----------------------------------------------",
+        #     throttle_duration_sec=0.2
+        # )
         
         # Write to motors
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
         self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=velocity_int_list, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
+        self.get_logger().info(f"velocity_int_list: {velocity_int_list}", throttle_duration_sec = 0.2)
 
         # Publish pose
         current_pose_msg.position = self.pose[0:2].tolist()
@@ -153,7 +150,6 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         
         # Update old variables
         self.previous_cable_lengths = desired_cable_lengths
-        self.control_loop_counter += 1
 
 def main(args=None):
     rclpy.init(args=args)
