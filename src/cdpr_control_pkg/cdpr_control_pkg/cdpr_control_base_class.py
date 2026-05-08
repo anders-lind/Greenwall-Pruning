@@ -19,6 +19,8 @@ class CDPRBaseControlNode(Node):
         super().__init__(node_name)
         print("CDPRBaseControlNode constructor")
 
+        self.log_period = 0.5
+
         # Node state variables
         self.homing_active = False
         self.last_buttons_state = None
@@ -32,6 +34,8 @@ class CDPRBaseControlNode(Node):
 
         self.auto_tighten_active = False
         self.cable_lengths_pre_tightened = None
+
+        self.cable_errors = np.array([0.0, 0.0, 0.0, 0.0])
 
         # Motor state variables
         self.motor_id = None
@@ -56,13 +60,12 @@ class CDPRBaseControlNode(Node):
         self.force_tension_time = 0.0 # S Old=0.1
         self.homing_loop_period = self.control_loop_period
         self.auto_tighten_loop_period = self.control_loop_period
-        self.auto_tighten_activate_loop_period = 60.0 # S
-
+        self.auto_tighten_activate_loop_period = 30.0 # S
 
         self.auto_tighten_tension = self.home_tension
+        
         # Tension safety check parameters
         self.max_tension_threshold = 60.0 # Newton (without spring: 40)
-        self.tension_thresholds = [self.max_tension_threshold, self.max_tension_threshold, self.max_tension_threshold, self.max_tension_threshold] # Newton
 
         # CDPR parameters
         self.spool_radius = 0.0115 - 0.001 # spool outer radius minus cable radius
@@ -75,38 +78,61 @@ class CDPRBaseControlNode(Node):
             self.cable_length_per_rot + self.spool_pitch, # Motor 3 (Bottom Right)
             self.cable_length_per_rot + self.spool_pitch  # Motor 4 (Bottom Left)
         ])
+
+        self.pulley_radius = 0.01
         
-        self.CDPR_height = 0.944
-        self.CDPR_width = 0.908
+        # self.CDPR_height_old = 0.944
+        # self.CDPR_width_old = 0.908
+
+        self.CDPR_height = 1.0
+        self.CDPR_width = 1.0
         self.end_effector_height = 0.160
         self.end_effector_width = 0.107
         # Old
         # self.end_effector_height = 0.03916
         # self.end_effector_width = 0.09322
 
-        self.B1 = np.array([0, self.CDPR_height])
-        self.B2 = np.array([self.CDPR_width, self.CDPR_height])
-        self.B3 = np.array([self.CDPR_width, 0])
-        self.B4 = np.array([0, 0])
+        # Old B point measured as the average release point of the pulley
+        # self.B1 = np.array([0, self.CDPR_height])
+        # self.B2 = np.array([self.CDPR_width, self.CDPR_height])
+        # self.B3 = np.array([self.CDPR_width, 0])
+        # self.B4 = np.array([0, 0])
 
 
-        # Springs v1 (long black sinusoidal ones)
-        # self.q1 = np.array([-0.14,0.03])
-        # self.q2 = np.array([0.14,0.0375])
-        # self.q3 = np.array([0.125,-0.155])
-        # self.q4 = np.array([-0.1225,-0.1525])
+        anchor_point_offset_from_frame = 0.032
 
-        # Springs v2 (small green harmonica ones)
-        self.q1 = np.array([-0.09,0.0])
-        self.q2 = np.array([0.09,0.0])
-        self.q3 = np.array([0.09,-0.11])
-        self.q4 = np.array([-0.09,-0.11])
+        # self.B1_old = np.array([0, self.CDPR_height])
+        # self.B2_old = np.array([self.CDPR_width, self.CDPR_height])
+        # self.B3_old = np.array([self.CDPR_width, 0])
+        # self.B4_old = np.array([0, 0])
 
-        # New EE pre spring q-vectors
-        # self.q1 = np.array([-0.0433,  0.0242]) 
-        # self.q2 = np.array([ 0.0639,  0.0242])
-        # self.q3 = np.array([ 0.0639, -0.1358])
-        # self.q4 = np.array([-0.0433, -0.1358])
+        self.C1 = np.array([anchor_point_offset_from_frame, self.CDPR_height - anchor_point_offset_from_frame])
+        self.C2 = np.array([self.CDPR_width - anchor_point_offset_from_frame, self.CDPR_height - anchor_point_offset_from_frame])
+        self.C3 = np.array([self.CDPR_width - anchor_point_offset_from_frame, anchor_point_offset_from_frame])
+        self.C4 = np.array([anchor_point_offset_from_frame, anchor_point_offset_from_frame])
+
+        self.B1 = np.array([0.045, self.CDPR_height - 0.03])
+        self.B2 = np.array([self.CDPR_width - 0.045, self.CDPR_height - 0.03])
+        self.B3 = np.array([self.CDPR_width - 0.045, 0.03])
+        self.B4 = np.array([0.045, 0.03])
+
+        # New EE with metal springs 10 N
+        # self.q1 = np.array([-0.125,  0.04]) 
+        # self.q2 = np.array([ 0.125,  0.04])
+        # self.q3 = np.array([ 0.125, -0.14])
+        # self.q4 = np.array([-0.125, -0.14])
+
+        # New EE with metal springs 15 N
+        # self.q1 = np.array([-0.15,  0.06]) 
+        # self.q2 = np.array([ 0.15,  0.06])
+        # self.q3 = np.array([ 0.15, -0.15])
+        # self.q4 = np.array([-0.15, -0.15])
+
+        #New EE measured to spring mounting point
+        self.q1 = np.array([-0.075,  -0.025]) 
+        self.q2 = np.array([ 0.075,  -0.025])
+        self.q3 = np.array([ 0.075, -0.08])
+        self.q4 = np.array([-0.075, -0.08])
 
         # Old EE
         # self.q1 = np.array([-self.end_effector_width/2, self.end_effector_height/2])
@@ -130,7 +156,7 @@ class CDPRBaseControlNode(Node):
 
 
         # State variables
-        self.initial_pose = np.array([0.45, 0.545-0.03, 0.0])
+        self.initial_pose = np.array([0.52, 0.545, 0.0])
         self.input = np.array([0.0, 0.0, 0.0]) # Joystick input (u)
         self.pose = self.initial_pose.copy()
         self.target_pose = self.initial_pose.copy() # (x, y, theta)
@@ -194,6 +220,9 @@ class CDPRBaseControlNode(Node):
         # Assume robot starts at center or user manually centered it
         self.pose = self.initial_pose.copy()
         self.previous_pose = self.initial_pose.copy()
+
+        # Compute release points after initial pose is set and before kinematics
+        self.compute_release_points()
         
         # Calculate theoretical lengths for the center
         self.initial_cable_vectors = self.inverse_kinematics(self.initial_pose[0:2], self.initial_pose[2])
@@ -214,6 +243,8 @@ class CDPRBaseControlNode(Node):
         # Xbox controller mapping
         x = -msg.axes[3]
         y = msg.axes[4]
+        if (abs(x) < 0.1): x = 0
+        if (abs(y) < 0.1): y = 0
         # D-pad overrides
         if abs(msg.axes[6]) > 0: x = -msg.axes[6]
         if abs(msg.axes[7]) > 0: y = msg.axes[7]
@@ -386,6 +417,40 @@ class CDPRBaseControlNode(Node):
         current_cable_lengths[0:2] = current_cable_lengths[0:2] + motor_encoder_rotations[0:2] * self.spool_pitch # Negative correction for winch box vertical travel
         current_cable_lengths[2:4] = current_cable_lengths[2:4] - motor_encoder_rotations[2:4] * self.spool_pitch # Positive corrention for winch box vertical travel
         return current_cable_lengths
+    
+    def compute_release_points(self):
+        return
+        theta = self.pose[2] # Pose orientation
+        cos_t, sin_t = np.cos(theta), np.sin(theta)
+        z_rot = np.array([[cos_t, -sin_t], 
+                        [sin_t,  cos_t]])
+        q_local_points = [self.q1, self.q2, self.q3, self.q4]
+        pulley_centers = [self.C1, self.C2, self.C3, self.C4]
+        
+        release_points = []
+
+        for i in range(4):
+            # Transform q to world frame
+            q_world = z_rot @ q_local_points[i] + self.pose[0:2]
+            # Vector from pulley center (B) to pulling point (q)
+            C = pulley_centers[i]
+            diff = q_world - C
+            d = np.linalg.norm(diff)
+            phi = np.arctan2(diff[1], diff[0])
+            alpha = np.arccos(self.pulley_radius / d)
+            self.get_logger().info(f"Phi for pulley {i+1}: {np.degrees(phi):.2f} degrees, alpha: {np.degrees(alpha):.2f} degrees")
+
+            if i % 2 == 0:
+                beta = phi + alpha
+            else:
+                beta = phi - alpha
+                
+            # Calculate final Global Frame coordinates
+            rx = C[0] + self.pulley_radius * np.cos(beta)
+            ry = C[1] + self.pulley_radius * np.sin(beta)
+            release_points.append(np.array([rx, ry]))
+
+        self.B1, self.B2, self.B3, self.B4 = release_points
 
     def force_to_current(self, force_vector):
         torque_vector = force_vector * self.spool_radius
@@ -421,6 +486,19 @@ class CDPRBaseControlNode(Node):
         l2 = p + R @ self.q2 - self.B2
         l3 = p + R @ self.q3 - self.B3
         l4 = p + R @ self.q4 - self.B4
+
+        # # Spring elongation from hooks law
+        # l1_spring = self.present_current[0]/self.spring_k
+        # l2_spring = self.present_current[1]/self.spring_k
+        # l3_spring = self.present_current[2]/self.spring_k
+        # l4_spring = self.present_current[3]/self.spring_k
+
+        # # Total cable vector is now li + spring_elongation in the same direction as li
+        # x1 = l1 + l1_spring*(l1/np.linalg.norm(l1))
+        # x2 = l2 + l2_spring*(l2/np.linalg.norm(l2))
+        # x3 = l3 + l3_spring*(l3/np.linalg.norm(l3))
+        # x4 = l4 + l4_spring*(l4/np.linalg.norm(l4))
+
         return np.array([l1, l2, l3, l4])
 
     def forward_kinematics(self, cable_lenghts, p0, theta0):
@@ -445,8 +523,8 @@ class CDPRBaseControlNode(Node):
             MSE = MSE/4
             return MSE
         
-        margin = 0.0 #0.05
-        limit_theta = 0.3 # ~17 degrees
+        margin = 0.03
+        limit_theta = 1.0  # 0.3 # ~17 degrees
         bnds = (
             (margin, self.CDPR_width - margin), 
             (margin, self.CDPR_height - margin), 
@@ -461,6 +539,9 @@ class CDPRBaseControlNode(Node):
             tol=1e-9,
             options={'ftol': 1e-9}
         )
+        
+        residual = constraint_equations(result.x)
+        self.get_logger().info(f"FK optimization residual: {residual:.20f}", throttle_duration_sec=self.log_period)
         return result.x
     
     def compute_structure_matrix(self, cable_vectors, theta):
@@ -492,8 +573,8 @@ class CDPRBaseControlNode(Node):
                 self.control_timer.reset()
                 self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
                 self.get_logger().info('Control loop STARTED.')
-            if self.auto_tighten_activate_timer.is_canceled():
-                self.auto_tighten_activate_timer.reset()
+            # if self.auto_tighten_activate_timer.is_canceled():
+            #     self.auto_tighten_activate_timer.reset()
 
 
         # Button B (rising edge)

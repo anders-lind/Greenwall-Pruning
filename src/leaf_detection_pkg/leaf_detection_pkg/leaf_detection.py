@@ -73,6 +73,10 @@ class LeafDetectionNode(Node):
         # ROS publishers
         self.pc_publisher = self.create_publisher(PointCloud2, '/leaf_detection/pointcloud', 10)
 
+        self.pub_mahal_raw = self.create_publisher(Image, '/leaf_detection/mahal_raw', 10)
+        self.pub_mahal_morphed = self.create_publisher(Image, '/leaf_detection/mahal_morphed', 10)
+        self.pub_sam2_overlay = self.create_publisher(Image, '/leaf_detection/sam2_overlay', 10)
+
         # ROS subscribers
         self.create_subscription(Image, '/camera/camera/color/image_raw', self.color_image_callback, 10)
         self.create_subscription(Image, '/camera/camera/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
@@ -115,9 +119,11 @@ class LeafDetectionNode(Node):
 
     async def leaf_detector(self):
         if not self.leaf_detector_running or self.color_image.size == 0 or self.depth_image.size == 0 or self.current_pose is None or not self.info_received:
+            self.get_logger().info("Early return due to not running or no image")
             return
 
         # Convert RGB image from Realsense to CIELAB
+        img_rgb = self.color_image.copy()
         img_cielab = cv2.cvtColor(self.color_image, cv2.COLOR_RGB2LAB)
         img_depth = self.depth_image.copy()
         img_pose = self.current_pose.copy()
@@ -136,10 +142,15 @@ class LeafDetectionNode(Node):
             return
 
         # SAM 2 Segmentation around seed point (if found)
-        sam2_segment_mask = self.run_sam2(seed_point)
+        sam2_segment_mask = self.run_sam2(seed_point, img_rgb)
         if sam2_segment_mask is None:
             return
         
+        mask_bool = (sam2_segment_mask > 0).astype(np.uint8)
+        sam2_viz = cv2.bitwise_and(img_rgb, img_rgb, mask=mask_bool)
+        self.pub_sam2_overlay.publish(self.cv_bridge.cv2_to_imgmsg(sam2_viz, encoding='rgb8'))
+        
+        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask, img_depth)
         # SAM 2 mask verification 
         if not self.verify_mask(sam2_segment_mask, img_cielab):
             self.get_logger().info("SAM 2 mask rejected")
@@ -158,7 +169,6 @@ class LeafDetectionNode(Node):
         # cv2.circle(sam2_segment_mask, (u,v), radius, 255, -1)
 
         # Compute 3D Pointcloud
-        leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask, img_depth)
         if len(leaf_pc) == 0:
             return
         self.publish_pointcloud(leaf_pc)
@@ -170,18 +180,18 @@ class LeafDetectionNode(Node):
         # Transform grasp point from camera frame to delta in end-effector frame
         dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
 
-        if self.trigger_pruning_sequence_client.service_is_ready():
-            req = CdprPos3D.Request()
+        # if self.trigger_pruning_sequence_client.service_is_ready():
+        #     req = CdprPos3D.Request()
             
-            req.x = float(img_pose[0] + dx)
-            req.y = float(img_pose[1] + dy)
-            req.z = float(dz) 
-            self.get_logger().info(f"Sending leaf pruning coordinates: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
+        #     req.x = float(img_pose[0] + dx)
+        #     req.y = float(img_pose[1] + dy)
+        #     req.z = float(dz) 
+        #     self.get_logger().info(f"Sending leaf pruning coordinates: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
             
-            await self.trigger_pruning_sequence_client.call_async(req)
-            self.get_logger().info("Pruning sequence completed. Resuming perception.")
-        else:
-            self.get_logger().error("Greenwall Pruning service is not available.")
+        #     await self.trigger_pruning_sequence_client.call_async(req)
+        #     self.get_logger().info("Pruning sequence completed. Resuming perception.")
+        # else:
+        #     self.get_logger().error("Greenwall Pruning service is not available.")
 
 
     def get_seed_point(self, img_lab) -> np.ndarray|None:
@@ -194,7 +204,9 @@ class LeafDetectionNode(Node):
         
         # Thresholding and morphological cleaning
         mask = (dist < self.pre_sam_thresh).astype(np.uint8) * 255
+        self.pub_mahal_raw.publish(self.cv_bridge.cv2_to_imgmsg(mask, encoding='mono8')) # Publish
         morphed = cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.morph_kernel), cv2.MORPH_CLOSE, self.morph_kernel)
+        self.pub_mahal_morphed.publish(self.cv_bridge.cv2_to_imgmsg(morphed, encoding='mono8')) # Publish
         contours, _ = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             return None
@@ -213,9 +225,9 @@ class LeafDetectionNode(Node):
         _, _, _, max_loc = cv2.minMaxLoc(dist_trans)
         return np.array([[max_loc[0], max_loc[1]]])
 
-    def run_sam2(self, leaf_coordinate):
+    def run_sam2(self, leaf_coordinate, image):
         with torch.inference_mode(), torch.autocast(device_type=self.device, dtype=torch.bfloat16):
-            self.predictor.set_image(self.color_image)
+            self.predictor.set_image(image)
             masks, scores, _ = self.predictor.predict(
                 point_coords=leaf_coordinate,
                 point_labels=np.array([1]), 

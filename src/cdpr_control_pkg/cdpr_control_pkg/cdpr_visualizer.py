@@ -14,10 +14,10 @@ class CDPRVisualizer(Node):
 
         self.cdpr_pose = [0.0, 0.0, 0.0]
 
-        self.CDPR_height = 0.944
-        self.CDPR_width = 0.908
-        self.end_effector_height = 0.03916
-        self.end_effector_width = 0.09322
+        self.CDPR_height = 1.0
+        self.CDPR_width = 1.0
+        self.end_effector_height = 0.160
+        self.end_effector_width = 0.107
         
         self.pose_subscriber = self.create_subscription(msg_type=CdprPose, topic='/cdpr/current_pose', callback=self.updatePose, qos_profile=0)
         self.goto_pose_subscriber = self.create_subscription(CdprPose, '/cdpr/goto_pose', self.goto_pose_callback, 10)

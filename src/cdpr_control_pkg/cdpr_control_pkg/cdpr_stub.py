@@ -20,7 +20,7 @@ class CDPRStubNode(Node):
         self.target_ori = self.current_ori
 
         # Simulated velocities
-        self.linear_speed = 0.05 # [m/s] 
+        self.linear_speed = 0.10 # [m/s] 
         self.angular_speed = 0.2 # [rad/s]
         
         self.loop_period = 0.02 # 50 Hz

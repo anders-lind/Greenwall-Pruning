@@ -28,11 +28,14 @@ class CDPRPathplannerNode(Node):
         self.end_effector_top_margin = 0.03
         self.end_effector_bottom_margin = 0.13
         self.end_effector_width = 0.22
-        self.CDPR_height = 0.944
-        self.CDPR_width = 0.908
+        # self.CDPR_height = 0.944
+        # self.CDPR_width = 0.908
+
+        self.CDPR_height = 1.0
+        self.CDPR_width = 1.0
         
         # Auxiliary poses
-        self.initial_pos = np.array([self.CDPR_width/2, 0.545-0.03])
+        self.initial_pos = np.array([0.52, 0.545])
         self.clear_homing_stick = self.initial_pos + np.array([0.0, 0.05])
         
         # State variables

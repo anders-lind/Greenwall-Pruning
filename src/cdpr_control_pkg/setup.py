@@ -27,6 +27,7 @@ setup(
             'cdpr_speed_control = cdpr_control_pkg.cdpr_speed_control:main',
             'cdpr_speed_control_joy = cdpr_control_pkg.cdpr_speed_control_joy:main',
             'cdpr_speed_control_feedback = cdpr_control_pkg.cdpr_speed_control_feedback:main',
+            'cdpr_speed_control_joy_no_feedback = cdpr_control_pkg.cdpr_speed_control_joy_no_feedback:main',
             'cdpr_position_and_tension_control = cdpr_control_pkg.cdpr_position_and_tension_control:main',
             'cdpr_force_control = cdpr_control_pkg.cdpr_force_control:main',
             'cdpr_force_control_joy = cdpr_control_pkg.cdpr_force_control_joy:main',

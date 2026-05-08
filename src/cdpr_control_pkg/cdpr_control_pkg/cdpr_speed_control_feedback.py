@@ -15,14 +15,18 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         super().__init__('cdpr_speed_control')
 
     def command_robot(self):
-        
-
         current_pose_msg = CdprPose()
 
         # Get goal pose
         goal_pose = self.target_pose.copy()
 
-        self.pose = self.forward_kinematics(self.cable_lengths, self.pose[0:2], self.pose[2]).copy()
+
+        # self.pose = self.forward_kinematics(self.cable_lengths, self.pose[0:2], self.pose[2]).copy()
+
+        actual_cable_lengths = self.cable_lengths - self.cable_errors
+        self.pose = self.forward_kinematics(actual_cable_lengths, self.pose[0:2], self.pose[2]).copy()
+
+        self.compute_release_points()
 
         # # Clamp pose
         # margin = 0.05 # m
@@ -72,14 +76,14 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
 
         # 2. Feedback: Correcting sensor error
         # Compare where the cables SHOULD be right now vs. where the encoders say they ARE
-        cable_errors = current_ideal_lengths - self.cable_lengths 
+        self.cable_errors = current_ideal_lengths - self.cable_lengths 
         
         # Proportional Gain (Tune this! Start small. 2.0 means it corrects errors over ~0.5 seconds)
         Kp_feedback = 2.0
-        fb_velocities = -(cable_errors * Kp_feedback)
+        fb_velocities = -(self.cable_errors * Kp_feedback)
 
         # 3. Total Velocity Command
-        desired_cable_velocities = ff_velocities# + fb_velocities
+        desired_cable_velocities = ff_velocities + fb_velocities
 
         # Convert to RPM and Motor Units
         desired_spool_rpm = (desired_cable_velocities / self.effective_circumferences) * 60 
@@ -95,29 +99,49 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
             return
 
 
-
         # Prints
         # self.get_logger().info(
         #     f"current_forces: ["
         #     f"{current_forces[0]:.2f}, {current_forces[1]:.2f}, {current_forces[2]:.2f}, {current_forces[3]:.2f}]",
+        #     # throttle_duration_sec=0.1
+        # )
+
+        # self.get_logger().info(
+        #     f"cable_errors: ["
+        #     f"{self.cable_errors[0]:.4f}, {self.cable_errors[1]:.4f}, {self.cable_errors[2]:.4f}, {self.cable_errors[3]:.4f}]",
+        #     throttle_duration_sec=self.log_period
+        # )
+
+        R1 = self.B1 - self.C1
+        R2 = self.B2 - self.C2
+        R3 = self.B3 - self.C3
+        R4 = self.B4 - self.C4
+
+        # self.get_logger().info(
+        #     f"R vectors: ["
+        #     f"{R1[0]:.4f}, {R1[1]:.4f}; "
+        #     f"{R2[0]:.4f}, {R2[1]:.4f}; "
+        #     f"{R3[0]:.4f}, {R3[1]:.4f}; "
+        #     f"{R4[0]:.4f}, {R4[1]:.4f}]",
+        #     throttle_duration_sec=self.log_period
+        # )
+
+        # self.get_logger().info(
+        #     f"self.pose: ["
+        #     f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
+        #     f"{self.pose[2]:.4f}]",
         #     throttle_duration_sec=0.2
         # )
-        self.get_logger().info(
-            f"self.pose: ["
-            f"{self.pose[0]:.4f}, {self.pose[1]:.4f}, "
-            f"{self.pose[2]:.4f}]",
-            throttle_duration_sec=0.2
-        )
         # self.get_logger().info(
         #     f"delta_pose: ["
         #     f"{delta_pos[0]:.4f}, {delta_pos[1]:.4f}, {delta_ori:.4f}]",
         #     throttle_duration_sec=0.2
         # )
-        self.get_logger().info(
-            f"goal_pose: ["
-            f"{goal_pose[0]:.4f}, {goal_pose[1]:.4f}, {goal_pose[2]:.4f}]",
-            throttle_duration_sec=0.2
-        )
+        # self.get_logger().info(
+        #     f"goal_pose: ["
+        #     f"{goal_pose[0]:.4f}, {goal_pose[1]:.4f}, {goal_pose[2]:.4f}]",
+        #     throttle_duration_sec=0.2
+        # )
         # self.get_logger().info(
         #     f"cable_lengths: ["
         #     f"{self.cable_lengths[0]:.4f}, {self.cable_lengths[1]:.4f}, {self.cable_lengths[2]:.4f}, {self.cable_lengths[3]:.4f}]",
@@ -133,15 +157,17 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         #     f"{desired_cable_velocities[0]:.4f}, {desired_cable_velocities[1]:.4f}, {desired_cable_velocities[2]:.4f}, {desired_cable_velocities[3]:.4f}]",
         #     throttle_duration_sec=0.2
         # )
+
+
         # self.get_logger().info(
         #     f"-----------------------------------------------",
-        #     throttle_duration_sec=0.2
+        #     throttle_duration_sec=self.log_period
         # )
         
         # Write to motors
         self.motor_write_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=[1,1,1,1], control_type_address=CONTROL_TABLE.TORQUE_ENABLE.value[0]))
         self.motor_write_continous_publisher.publish(MotorCmd(motor_id=[1,2,3,4], value=velocity_int_list, control_type_address=CONTROL_TABLE.GOAL_VELOCITY.value[0]))
-        self.get_logger().info(f"velocity_int_list: {velocity_int_list}", throttle_duration_sec = 0.2)
+        # self.get_logger().info(f"velocity_int_list: {velocity_int_list}", throttle_duration_sec = 0.2)
 
         # Publish pose
         current_pose_msg.position = self.pose[0:2].tolist()
