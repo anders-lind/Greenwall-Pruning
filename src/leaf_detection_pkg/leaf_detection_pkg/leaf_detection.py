@@ -15,7 +15,7 @@ from cv_bridge import CvBridge
 
 from std_msgs.msg import Header
 from std_srvs.srv import SetBool
-from sensor_msgs.msg import PointCloud2, PointField, Image, CameraInfo
+from sensor_msgs.msg import PointCloud2, PointField, Image, CameraInfo, Joy
 import sensor_msgs_py.point_cloud2 as pc2
 from plantwall_custom_interfaces.msg import CdprPose
 from plantwall_custom_interfaces.srv import CdprPos3D
@@ -30,6 +30,8 @@ class LeafDetectionNode(Node):
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.get_logger().info(f"Using {self.device} for leaf detection.")
+
+        self.button_array = None
 
         self.cv_bridge = CvBridge()
         self.color_image: np.ndarray = np.zeros(0)
@@ -82,6 +84,8 @@ class LeafDetectionNode(Node):
         self.create_subscription(Image, '/camera/camera/aligned_depth_to_color/image_raw', self.depth_image_callback, 10)
         self.create_subscription(CameraInfo, '/camera/camera/aligned_depth_to_color/camera_info', self.camera_info_callback, 10)
         self.create_subscription(CdprPose, '/cdpr/current_pose', self.current_pose_callback, 10)
+        self.joy_subscriber = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
+
 
         # ROS Service servers
         self.create_service(SetBool, '/leaf_detection/toggle', self.change_state_service_callback)
@@ -116,6 +120,9 @@ class LeafDetectionNode(Node):
         self.get_logger().info(f"Leaf Detection {status}.")
         response.success = True
         return response
+
+    def joy_callback(self, msg: Joy):
+        self.button_array = msg.buttons
 
     async def leaf_detector(self):
         if not self.leaf_detector_running or self.color_image.size == 0 or self.depth_image.size == 0 or self.current_pose is None or not self.info_received:
@@ -179,6 +186,18 @@ class LeafDetectionNode(Node):
 
         # Transform grasp point from camera frame to delta in end-effector frame
         dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
+
+        leaf_detection_accepted = False
+
+        while leaf_detection_accepted == False:
+            self.get_logger().info("Leaf found, waiting for user confirmation. Press RB to accept, LB to reject.", throttle_duration_sec=1.0)
+            if self.button_array[5] == 1: # If RB button is pressed, accept the detection and break the loop
+                leaf_detection_accepted = True
+                self.get_logger().info("Leaf detection accepted by user.")
+            if self.button_array[4] == 1: # If LB button is pressed, reject the detection and break the loop
+                self.get_logger().info("Leaf detection rejected by user.")
+                return
+
 
         # if self.trigger_pruning_sequence_client.service_is_ready():
         #     req = CdprPos3D.Request()

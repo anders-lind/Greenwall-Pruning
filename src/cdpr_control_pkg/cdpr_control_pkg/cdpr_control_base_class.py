@@ -56,7 +56,7 @@ class CDPRBaseControlNode(Node):
 
         # Homing parameters
         self.homing_speed = int(10) # Motor units [0.229 RPM]
-        self.home_tension = 10 # Newton
+        self.home_tension = 15 # Newton
         self.force_tension_time = 0.0 # S Old=0.1
         self.homing_loop_period = self.control_loop_period
         self.auto_tighten_loop_period = self.control_loop_period

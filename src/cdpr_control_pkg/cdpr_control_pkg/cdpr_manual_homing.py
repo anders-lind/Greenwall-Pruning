@@ -41,8 +41,8 @@ class CDPRManualHomingNode(Node):
         motor_ids_full = np.array(motor_state_msg.motor_id)
         indices = [np.where(motor_ids_full == id)[0][0] for id in [1,2,3,4]]
 
-        present_current = np.array(motor_state_msg.present_current)[indices]
-        self.get_logger().info(f"Present current: {present_current}")
+        # present_current = np.array(motor_state_msg.present_current)[indices]
+        # self.get_logger().info(f"Present current: {present_current}")
         # present_position = np.array(motor_state_msg.present_position)[indices]
 
     def joy_callback(self, msg: Joy):

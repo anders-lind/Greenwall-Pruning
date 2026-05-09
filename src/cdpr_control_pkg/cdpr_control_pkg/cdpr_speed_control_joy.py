@@ -46,7 +46,7 @@ class CDPRSpeedControlJoyNode(CDPRBaseControlNode):
         # elif delta_pos_norm < self.slowdown_radius_pos:
         #     delta_pos_scaled = delta_pos
         else:
-            delta_pos_scaled = delta_pos / delta_pos_norm
+            delta_pos_scaled = delta_pos# / delta_pos_norm
         
         # Scale delta ori
         if abs(delta_ori) < self.stopping_rot:
