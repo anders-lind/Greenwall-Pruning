@@ -25,7 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'leaf_detection = leaf_detection_pkg.leaf_detection:main',
-            'leaf_detection_stub = leaf_detection_pkg.leaf_detection_stub:main'
+            'leaf_detection_stub = leaf_detection_pkg.leaf_detection_stub:main',
+            'image_sampler = leaf_detection_pkg.image_sampler:main'
         ],
     },
 )

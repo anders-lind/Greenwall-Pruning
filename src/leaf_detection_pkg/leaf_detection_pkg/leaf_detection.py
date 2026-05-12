@@ -20,6 +20,10 @@ import sensor_msgs_py.point_cloud2 as pc2
 from plantwall_custom_interfaces.msg import CdprPose
 from plantwall_custom_interfaces.srv import CdprPos3D
 
+import csv
+from datetime import datetime
+import time
+
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
@@ -27,6 +31,16 @@ class LeafDetectionNode(Node):
     def __init__(self):
         super().__init__('leaf_detection')
         self.get_logger().info("Leaf Detection Node has been started.")
+
+        # --- LOGGING DIRECTORY SETUP ---
+        # Creates a folder like ~/Thesis/experiment_logs/20260512_1030/
+        home = os.path.expanduser("~")
+        self.session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.log_dir = os.path.join(home, "Thesis/experiment_logs", self.session_id)
+        os.makedirs(self.log_dir, exist_ok=True)
+        
+        self.csv_path = os.path.join(self.log_dir, "experiment_results.csv")
+        self.init_csv()
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.get_logger().info(f"Using {self.device} for leaf detection.")
@@ -124,9 +138,66 @@ class LeafDetectionNode(Node):
     def joy_callback(self, msg: Joy):
         self.button_array = msg.buttons
 
+    def init_csv(self):
+        """Initializes the CSV file with updated headers."""
+        with open(self.csv_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                'timestamp', 
+                'image_file', 
+                'dx', 'dy', 'dz', 
+                'robot_x', 'robot_y', 'robot_yaw', 
+                'u_seed', 'v_seed',             
+                'verif_percentile',             
+                'verif_dist',                   
+                'user_accepted', 
+                'pruning_success'
+            ])
+    def save_experiment_data(self, image, dx, dy, dz, pose, accepted, u, v, p_dist):
+        """Saves image and logs all metrics to CSV."""
+        timestamp = datetime.now().strftime("%H-%M-%S_%f")
+        img_filename = f"capture_{timestamp}.png"
+        img_path = os.path.join(self.log_dir, img_filename)
+
+        # Save Image (RGB -> BGR for OpenCV)
+        try:
+            cv2.imwrite(img_path, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        except Exception as e:
+            self.get_logger().error(f"Failed to save image: {e}")
+
+        # Log to CSV
+        try:
+            with open(self.csv_path, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    timestamp,
+                    img_filename,
+                    f"{dx:.4f}", f"{dy:.4f}", f"{dz:.4f}",
+                    f"{pose[0]:.4f}", f"{pose[1]:.4f}", f"{pose[2]:.4f}",
+                    u, v,                            # Seed point coordinates
+                    self.percentile,                 # Verification percentile
+                    f"{p_dist:.4f}",                 # Mahalanobis distance at percentile
+                    1 if accepted else 0,
+                    ""                               # Manual success entry
+                ])
+        except Exception as e:
+            self.get_logger().error(f"Failed to log CSV data: {e}")
+        
     async def leaf_detector(self):
-        if not self.leaf_detector_running or self.color_image.size == 0 or self.depth_image.size == 0 or self.current_pose is None or not self.info_received:
-            self.get_logger().info("Early return due to not running or no image")
+        if not self.leaf_detector_running:
+            self.get_logger().info("leaf_detector_running is False.", throttle_duration_sec=1.0)
+            return
+        if self.color_image.size == 0:
+            self.get_logger().info("color_image is empty.", throttle_duration_sec=1.0)
+            return
+        if self.depth_image.size == 0:
+            self.get_logger().info("depth_image is empty.", throttle_duration_sec=1.0)
+            return
+        if self.current_pose is None:
+            self.get_logger().info("current_pose is None.", throttle_duration_sec=1.0)
+            return
+        if not self.info_received:
+            self.get_logger().info("info_received is False.", throttle_duration_sec=1.0)
             return
 
         # Convert RGB image from Realsense to CIELAB
@@ -159,8 +230,13 @@ class LeafDetectionNode(Node):
         
         leaf_pc = self.get_leaf_pointcloud(sam2_segment_mask, img_depth)
         # SAM 2 mask verification 
-        if not self.verify_mask(sam2_segment_mask, img_cielab):
-            self.get_logger().info("SAM 2 mask rejected")
+
+        
+        is_valid, dist_val = self.verify_mask(sam2_segment_mask, img_cielab)
+        
+        # Even if verification fails, you might want to log it as a system-rejected FP
+        if not is_valid:
+            self.get_logger().info(f"SAM 2 mask rejected (Dist: {dist_val:.2f})")
             return
         
         # Online daptive reference color
@@ -184,20 +260,40 @@ class LeafDetectionNode(Node):
         # Find grasp point (TODO: currently as median of pointcloud, perhaps find better way)
         grasp_target = np.median(leaf_pc, axis=0)
 
+    
         # Transform grasp point from camera frame to delta in end-effector frame
         dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
 
+        # TODO Potentially change dy as function of dz
+        # dy += 0.1 * dz
+
+        # --- USER CONFIRMATION ---
         leaf_detection_accepted = False
+        self.get_logger().info("Leaf found. Press RB to Accept, LB to Reject.")
 
+        # Your original logic works because of the MultiThreadedExecutor
         while leaf_detection_accepted == False:
-            self.get_logger().info("Leaf found, waiting for user confirmation. Press RB to accept, LB to reject.", throttle_duration_sec=1.0)
-            if self.button_array[5] == 1: # If RB button is pressed, accept the detection and break the loop
-                leaf_detection_accepted = True
-                self.get_logger().info("Leaf detection accepted by user.")
-            if self.button_array[4] == 1: # If LB button is pressed, reject the detection and break the loop
-                self.get_logger().info("Leaf detection rejected by user.")
-                return
+            if self.button_array is not None:
+                if self.button_array[5] == 1: # RB
+                    leaf_detection_accepted = True
+                    self.get_logger().info("Detection Accepted.")
+                elif self.button_array[4] == 1: # LB
+                    self.get_logger().info("Detection Rejected.")
+                    # Log the rejection before returning
+                    self.save_experiment_data(img_rgb, dx, dy, dz, img_pose, accepted=False)
+                    return
+            
+            # Keep the while loop from consuming 100% CPU on its thread
+            time.sleep(0.01)
 
+        # Log the acceptance
+
+        u_log = int(seed_point[0, 0])
+        v_log = int(seed_point[0, 1])
+
+        self.save_experiment_data(img_rgb, dx, dy, dz, img_pose, 
+                                  accepted=True, u=u_log, v=v_log, 
+                                  p_dist=dist_val)
 
         if self.trigger_pruning_sequence_client.service_is_ready():
             req = CdprPos3D.Request()
@@ -264,7 +360,7 @@ class LeafDetectionNode(Node):
         diff = pixels - self.current_mu
         dists = np.sum(diff * (diff @ self.inv_cov), axis=1)
         percentile_dist = np.percentile(dists, self.percentile)
-        return percentile_dist <= self.post_sam_thresh
+        return (percentile_dist <= self.post_sam_thresh), percentile_dist
 
     def update_adaptive_mean(self, mask, img_lab):
         mask_bool = mask > 0
