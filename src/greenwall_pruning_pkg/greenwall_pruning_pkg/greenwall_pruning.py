@@ -5,12 +5,14 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rclpy.node import Node
 from std_srvs.srv import SetBool
+from example_interfaces.srv import SetBool as SetBoolExample
 
 from plantwall_custom_interfaces.srv import Float64 as Float64Srv
 from plantwall_custom_interfaces.srv import CdprPose as CdprPoseSrv
 from plantwall_custom_interfaces.srv import CdprPos3D as CdprPos3DSrv
 
 import numpy as np
+import time
 
 class GreenwallPruningNode(Node):
     def __init__(self):
@@ -19,10 +21,13 @@ class GreenwallPruningNode(Node):
 
         self.executing_sequence = False # Lock to prevent simultaneous sequences
 
-        self.cdpr_prepicking_offset = 0.05 # [m]
-        self.cdpr_picking_offset = 0.1 # [m]
-        self.ee_prepicking_finger_gap = 0.02 # [m]
-        self.ee_release_finger_gap = 0.05 # [m]
+        y_bias = 0.06
+
+        self.cdpr_prepicking_offset = -0.07 + y_bias # [m]
+        self.cdpr_leaf_offset = 0.0 + y_bias # [m]
+        self.cdpr_pull_distance = y_bias - 0.05 # [m]
+        self.ee_prepicking_finger_gap = 0.05 # [m]
+        self.ee_release_finger_gap = 0.10 # [m]
 
         # --- THE THREADING ARCHITECTURE ---
         # Create a dedicated callback group for the Orchestrator Service
@@ -42,7 +47,7 @@ class GreenwallPruningNode(Node):
         self.perception_toggle_client = self.create_client(SetBool, '/leaf_detection/toggle')
         self.gripper_control_move_TCP_client = self.create_client(Float64Srv, '/gripper_control/move_TCP')
         self.gripper_control_set_finger_distance_client = self.create_client(Float64Srv, '/gripper_control/set_finger_distance')
-        self.gripper_control_grip_client = self.create_client(Float64Srv, '/gripper_control/grip')
+        self.gripper_control_grip_client = self.create_client(SetBoolExample, '/gripper_control/grip')
 
     async def trigger_pruning_callback(self, request, response):
         
@@ -82,10 +87,10 @@ class GreenwallPruningNode(Node):
             if self.cdpr_pathplanner_goto_pose_client.wait_for_service(timeout_sec=1.0):
                 goto_req = CdprPoseSrv.Request()
                 goto_req.position[0] = float(leaf_pos3D[0])
-                goto_req.position[1] = float(leaf_pos3D[1] - self.cdpr_prepicking_offset)
+                goto_req.position[1] = float(leaf_pos3D[1] + self.cdpr_prepicking_offset)
                 goto_req.orientation = 0.0
                 await self.cdpr_pathplanner_goto_pose_client.call_async(goto_req)
-                self.get_logger().info("Sent goto_pose request to pathplanner.")
+                self.get_logger().info("Sent CDPR to prepicking pose.")
             else:
                 self.get_logger().error("Failed to call pathplanner goto_pose service.")
                 return response
@@ -95,7 +100,7 @@ class GreenwallPruningNode(Node):
                 move_TCP_req = Float64Srv.Request()
                 move_TCP_req.value = float(leaf_pos3D[2]) 
                 await self.gripper_control_move_TCP_client.call_async(move_TCP_req)
-                self.get_logger().info("Sent move_TCP request to end effector.")
+                self.get_logger().info("Moved EE to match leaf depth.")
             else:
                 self.get_logger().error("Failed to call end effector move_TCP service.")
                 return response
@@ -105,7 +110,7 @@ class GreenwallPruningNode(Node):
                 move_finger_req = Float64Srv.Request()
                 move_finger_req.value = float(self.ee_prepicking_finger_gap)
                 await self.gripper_control_set_finger_distance_client.call_async(move_finger_req)
-                self.get_logger().info("Sent move_finger request to end effector to set pre-picking finger gap.")
+                self.get_logger().info("Opened gripper fingers for pruning.")
             else:
                 self.get_logger().error("Failed to call end effector move_finger service to set pre-picking finger gap.")
                 return response
@@ -114,20 +119,20 @@ class GreenwallPruningNode(Node):
             if self.cdpr_pathplanner_goto_pose_client.wait_for_service(timeout_sec=1.0):
                 goto_req = CdprPoseSrv.Request()
                 goto_req.position[0] = float(leaf_pos3D[0])
-                goto_req.position[1] = float(leaf_pos3D[1])
+                goto_req.position[1] = float(leaf_pos3D[1] + self.cdpr_leaf_offset)
                 goto_req.orientation = 0.0
                 await self.cdpr_pathplanner_goto_pose_client.call_async(goto_req)
-                self.get_logger().info("Sent goto_pose request to pathplanner for final pruning pose.")
+                self.get_logger().info("Sent CDPR to pick pose.")
             else:
                 self.get_logger().error("Failed to call pathplanner goto_pose service for final pruning pose.")
                 return response
             
             # 7. Close gripper fingers to prune the leaf
             if self.gripper_control_grip_client.wait_for_service(timeout_sec=1.0):
-                move_finger_req = Float64Srv.Request()
-                move_finger_req.value = 0.0 # fully closed fingers
+                move_finger_req = SetBoolExample.Request()
+                move_finger_req.data = True # fully closed fingers
                 await self.gripper_control_grip_client.call_async(move_finger_req)
-                self.get_logger().info("Sent grip request to end effector to prune the leaf.")
+                self.get_logger().info("EE grip.")
             else:
                 self.get_logger().error("Failed to call end effector grip service to prune the leaf.")
                 return response
@@ -136,10 +141,10 @@ class GreenwallPruningNode(Node):
             if self.cdpr_pathplanner_goto_pose_client.wait_for_service(timeout_sec=1.0):
                 goto_req = CdprPoseSrv.Request()
                 goto_req.position[0] = float(leaf_pos3D[0])
-                goto_req.position[1] = float(leaf_pos3D[1] - self.cdpr_picking_offset)
+                goto_req.position[1] = float(leaf_pos3D[1] + self.cdpr_pull_distance)
                 goto_req.orientation = 0.0
                 await self.cdpr_pathplanner_goto_pose_client.call_async(goto_req)
-                self.get_logger().info("Sent goto_pose request to pathplanner to pluck the leaf.")
+                self.get_logger().info("Sent CDPR down.")
             else:
                 self.get_logger().error("Failed to call pathplanner goto_pose service to pluck the leaf.")
                 return response
@@ -149,7 +154,7 @@ class GreenwallPruningNode(Node):
                 move_TCP_req = Float64Srv.Request()
                 move_TCP_req.value = 0.0 
                 await self.gripper_control_move_TCP_client.call_async(move_TCP_req)
-                self.get_logger().info("Sent move_TCP request to end effector to reset TCP position.")
+                self.get_logger().info("Moved EE back to zero.")
             else:
                 self.get_logger().error("Failed to call end effector move_TCP service to reset TCP position.")
                 return response
@@ -159,12 +164,24 @@ class GreenwallPruningNode(Node):
                 move_finger_req = Float64Srv.Request()
                 move_finger_req.value = float(self.ee_release_finger_gap)
                 await self.gripper_control_set_finger_distance_client.call_async(move_finger_req)
-                self.get_logger().info("Sent move_finger request to end effector to release the leaf.")
+                time.sleep(2)
+                self.get_logger().info("Open gripper fingers for releasing.")
             else:
                 self.get_logger().error("Failed to call end effector move_finger service to release the leaf.")
                 return response
             
-            # 11. Toggle perception system back on
+            # 11. Close gripper fingers
+            if self.gripper_control_set_finger_distance_client.wait_for_service(timeout_sec=1.0):
+                move_finger_req = Float64Srv.Request()
+                move_finger_req.value = float(0.0)
+                await self.gripper_control_set_finger_distance_client.call_async(move_finger_req)
+                self.get_logger().info("Close gripper fingers")
+            else:
+                self.get_logger().error("Failed to call end effector move_finger service to release the leaf.")
+                return response
+            
+            
+            # 12. Toggle perception system back on
             if self.perception_toggle_client.wait_for_service(timeout_sec=1.0):
                 toggle_req = SetBool.Request()
                 toggle_req.data = True
@@ -174,7 +191,7 @@ class GreenwallPruningNode(Node):
                 self.get_logger().error("Failed to call perception toggle service to reactivate.")
                 return response
             
-            # 12. Toggle pathplanner search mode back on
+            # 13. Toggle pathplanner search mode back on
             if self.cdpr_pathplanner_toggle_client.wait_for_service(timeout_sec=1.0):
                 toggle_req = SetBool.Request()
                 toggle_req.data = True

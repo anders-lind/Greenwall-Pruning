@@ -46,8 +46,8 @@ class LeafDetectionNode(Node):
         # Perception system hyperparameters
         self.area_min_ratio = 0.0015 
         self.area_max_ratio = 0.15     
-        self.pre_sam_thresh = 4.0      
-        self.post_sam_thresh = 2.5     
+        self.pre_sam_thresh = 16.0      
+        self.post_sam_thresh = 3.5     
         self.percentile = 15.0         
         self.morph_kernel = np.ones((5, 5), np.uint8)
         self.adaptive_alpha = 0.00 # online reference color adaption filter coefficient
@@ -199,18 +199,18 @@ class LeafDetectionNode(Node):
                 return
 
 
-        # if self.trigger_pruning_sequence_client.service_is_ready():
-        #     req = CdprPos3D.Request()
+        if self.trigger_pruning_sequence_client.service_is_ready():
+            req = CdprPos3D.Request()
             
-        #     req.x = float(img_pose[0] + dx)
-        #     req.y = float(img_pose[1] + dy)
-        #     req.z = float(dz) 
-        #     self.get_logger().info(f"Sending leaf pruning coordinates: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
+            req.x = float(img_pose[0] + dx)
+            req.y = float(img_pose[1] + dy)
+            req.z = float(dz) 
+            self.get_logger().info(f"Sending leaf pruning coordinates: x={req.x:.3f}, y={req.y:.3f}, z={req.z:.3f}")
             
-        #     await self.trigger_pruning_sequence_client.call_async(req)
-        #     self.get_logger().info("Pruning sequence completed. Resuming perception.")
-        # else:
-        #     self.get_logger().error("Greenwall Pruning service is not available.")
+            await self.trigger_pruning_sequence_client.call_async(req)
+            self.get_logger().info("Pruning sequence completed. Resuming perception.")
+        else:
+            self.get_logger().error("Greenwall Pruning service is not available.")
 
 
     def get_seed_point(self, img_lab) -> np.ndarray|None:

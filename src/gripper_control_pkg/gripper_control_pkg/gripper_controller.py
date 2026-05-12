@@ -39,8 +39,8 @@ class GripperController(Node):
         self.gear_circumference = 2*3.1415*self.gear_radius
         self.motor_values_per_rotation = 4095
         self.dist_to_motor_value = self.motor_values_per_rotation / self.gear_circumference
-        self.max_top_pos = 0.30
-        self.max_bot_pos = 0.30
+        self.max_top_pos = 0.40
+        self.max_bot_pos = 0.40
         self.min_top_pos = 0
         self.min_bot_pos = 0
 
@@ -186,12 +186,10 @@ class GripperController(Node):
 
         # Wait for motors to reach the desired positions and stop
         present_load = self.present_load.copy()
-        self.get_logger().info(f"Move to desired present load: {present_load}")
         time.sleep(0.4) # Wait for the motors to start the movement
         moving_top, moving_bot = self.moving
         while (moving_top or moving_bot):
             present_load = self.present_load.copy()
-            self.get_logger().info(f"Move to desired loop Present load: {present_load}")
             moving_top, moving_bot = self.moving
             time.sleep(0.01) # Do not burn the CPU
     
@@ -229,7 +227,6 @@ class GripperController(Node):
         while (not grasp_force_exceeded):
             # get present load
             present_load = self.present_load.copy()
-            self.get_logger().info(f"Grip Present load: {present_load}")
 
             # Stop each motor as they reach desired grasp force
             move_top_motor = False
@@ -250,6 +247,8 @@ class GripperController(Node):
             else:
                 time.sleep(0.05)
 
+        self.get_logger().info("Finished gripping.")
+
         response.success = True
         return response
     
@@ -267,6 +266,8 @@ class GripperController(Node):
         self.finger_distance = request.value
         self.move_to_desired()
 
+        self.get_logger().info(f"Finished setting finger distance to: {request.value:.4f} ")
+
         return response
             
 
@@ -282,6 +283,8 @@ class GripperController(Node):
 
         self.tcp_pos = request.value
         self.move_to_desired()
+
+        self.get_logger().info(f"Finished moving tcp to: {request.value:.4f}")
 
         return response
 
