@@ -13,6 +13,7 @@
   <test_depend>python3-pytest</test_depend>
   <depend>sensor_msgs</depend>
   <depend>example_interfaces</depend>
+  <exec_depend>ros2launch</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
