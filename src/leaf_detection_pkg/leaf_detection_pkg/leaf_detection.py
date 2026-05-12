@@ -264,8 +264,14 @@ class LeafDetectionNode(Node):
         # Transform grasp point from camera frame to delta in end-effector frame
         dx, dy, dz = self.transform_cam_to_ee(grasp_target[0], grasp_target[1], grasp_target[2])
 
-        # TODO Potentially change dy as function of dz
-        # dy += 0.1 * dz
+        # Compensate for end effector sagging
+        # Δy = -0.0546 + (0.2006 * |y - 0.5|) + (0.4081 * z)
+        y = img_pose[1]
+        z = dz
+        offset_y = -0.0546 + (0.2006 * abs(y - 0.5)) + (0.4081 * z)
+
+        dy = dy + offset_y
+
 
         # --- USER CONFIRMATION ---
         leaf_detection_accepted = False

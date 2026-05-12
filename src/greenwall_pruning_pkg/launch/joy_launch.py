@@ -33,7 +33,7 @@ def generate_launch_description():
             executable='gripper_controller',
             name='gripper_controller'),
         
-        # CDPR Speed Control Feedback
+        # CDPR Speed Control Joy
         launch_ros.actions.Node(
             package='cdpr_control_pkg',
             executable='cdpr_speed_control_joy',
