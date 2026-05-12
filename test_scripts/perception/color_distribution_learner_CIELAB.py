@@ -39,4 +39,5 @@ for cls in classes:
         }
 
 np.save("perception_stats_cielab.npy", stats_lab)
+print(stats_lab)
 print("Stats saved in CIELAB space.")
