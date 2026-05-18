@@ -20,7 +20,7 @@ class GripperController(Node):
         # Member variables
         self.safety_check_load_threshold = 300.0 # unit is 0.1% of motor max torque
         self.grasp_speed = 5
-        self.grasp_force = 200
+        self.grasp_force = 250
         self.is_grasping = False
         self.speed_profile = 120 # 0.229 [rev/min]
         self.acc_profile = 10 # 214.577 [rev/min2]

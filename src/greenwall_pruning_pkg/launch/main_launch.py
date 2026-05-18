@@ -51,34 +51,34 @@ def generate_launch_description():
             executable='cdpr_speed_control_feedback',
             name='cdpr_speed_control_feedback'),
         
-        # CDPR Visualizer
-        launch_ros.actions.Node(
-            package='cdpr_control_pkg',
-            executable='cdpr_visualizer',
-            name='cdpr_visualizer'),
+        # # CDPR Visualizer
+        # launch_ros.actions.Node(
+        #     package='cdpr_control_pkg',
+        #     executable='cdpr_visualizer',
+        #     name='cdpr_visualizer'),
 
-        # Leaf Detection
-        launch_ros.actions.Node(
-            package='leaf_detection_pkg',
-            executable='leaf_detection',
-            name='leaf_detection'),
+        # # Leaf Detection
+        # launch_ros.actions.Node(
+        #     package='leaf_detection_pkg',
+        #     executable='leaf_detection',
+        #     name='leaf_detection'),
         
     ])
 
     # Start Leaf Detection
-    ld.add_action(
-        ExecuteProcess(
-            cmd=[
-                [
-                    FindExecutable(name="ros2"),
-                    " service call ",
-                    "/leaf_detection/toggle ",
-                    "std_srvs/srv/SetBool ",
-                    "\"{data: true}\"",
-                ]
-            ],
-            shell=True,
-        ))
+    # ld.add_action(
+    #     ExecuteProcess(
+    #         cmd=[
+    #             [
+    #                 FindExecutable(name="ros2"),
+    #                 " service call ",
+    #                 "/leaf_detection/toggle ",
+    #                 "std_srvs/srv/SetBool ",
+    #                 "\"{data: true}\"",
+    #             ]
+    #         ],
+    #         shell=True,
+    #     ))
 
     # Start Path Planner
     ld.add_action(

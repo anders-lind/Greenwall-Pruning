@@ -21,12 +21,9 @@ class GreenwallPruningNode(Node):
 
         self.executing_sequence = False # Lock to prevent simultaneous sequences
 
-        y_bias = 0.06
-
-        self.cdpr_prepicking_offset = -0.07 + y_bias # [m]
-        self.cdpr_leaf_offset = 0.0 + y_bias # [m]
-        self.cdpr_pull_distance = y_bias - 0.05 # [m]
-        self.ee_prepicking_finger_gap = 0.05 # [m]
+        self.cdpr_prepicking_offset = -0.08 # [m]
+        self.cdpr_pull_distance = - 0.13 # [m]
+        self.ee_prepicking_finger_gap = 0.07 # [m]
         self.ee_release_finger_gap = 0.10 # [m]
 
         # --- THE THREADING ARCHITECTURE ---
@@ -119,7 +116,7 @@ class GreenwallPruningNode(Node):
             if self.cdpr_pathplanner_goto_pose_client.wait_for_service(timeout_sec=1.0):
                 goto_req = CdprPoseSrv.Request()
                 goto_req.position[0] = float(leaf_pos3D[0])
-                goto_req.position[1] = float(leaf_pos3D[1] + self.cdpr_leaf_offset)
+                goto_req.position[1] = float(leaf_pos3D[1])
                 goto_req.orientation = 0.0
                 await self.cdpr_pathplanner_goto_pose_client.call_async(goto_req)
                 self.get_logger().info("Sent CDPR to pick pose.")

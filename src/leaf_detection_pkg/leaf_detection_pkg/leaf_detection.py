@@ -55,20 +55,32 @@ class LeafDetectionNode(Node):
         self.fx = self.fy = self.cx = self.cy = None
         self.camera_height = self.camera_width = None
         self.current_pose = None
-        self.leaf_detector_running = False
+        self.leaf_detector_running = True
 
         # Perception system hyperparameters
+        # self.area_min_ratio = 0.0015 
+        # self.area_max_ratio = 0.15     
+        # self.pre_sam_thresh = 16.0      
+        # self.post_sam_thresh = 3.5     
+        # self.percentile = 15.0         
+        # self.morph_kernel = np.ones((5, 5), np.uint8)
+        # self.adaptive_alpha = 0.00 # online reference color adaption filter coefficient
+        # self.max_drift_distance = 15.0 # max distance from anchor reference color
+
         self.area_min_ratio = 0.0015 
         self.area_max_ratio = 0.15     
-        self.pre_sam_thresh = 16.0      
-        self.post_sam_thresh = 3.5     
+        self.pre_sam_thresh = 4.0
+        self.post_sam_thresh = 4.0     
         self.percentile = 15.0         
         self.morph_kernel = np.ones((5, 5), np.uint8)
         self.adaptive_alpha = 0.00 # online reference color adaption filter coefficient
         self.max_drift_distance = 15.0 # max distance from anchor reference color
 
         # Load Mahalanobis learned reference data
-        mahal_data_path = "/home/alex/Thesis/Greenwall-Pruning/test_scripts/perception/perception_stats_cielab.npy"
+        # mahal_data_path = "/home/alex/Thesis/Greenwall-Pruning/perception_stats_cielab_new.npy"
+
+        mahal_data_path = "/home/alex/Thesis/perception_stats_cielab.npy"
+
         if not os.path.exists(mahal_data_path):
             self.get_logger().error(f"{mahal_data_path} not found. Exiting.")
             exit()
@@ -212,6 +224,12 @@ class LeafDetectionNode(Node):
             return
         self.get_logger().info(f"Target found. Seed point: {seed_point}")
         
+        # Draw seedpoint on RGB image for visualization
+        seed_viz = img_rgb.copy()
+        cv2.circle(seed_viz, (seed_point[0, 0], seed_point[0, 1]), 10, (0, 0, 255), 2)
+
+        u_log = int(seed_point[0, 0])
+        v_log = int(seed_point[0, 1])
 
         # Check if seedpoint is a minimum amount of pixels from the border of the image, if so reject it
         min_border_dist = 100
@@ -222,6 +240,7 @@ class LeafDetectionNode(Node):
         # SAM 2 Segmentation around seed point (if found)
         sam2_segment_mask = self.run_sam2(seed_point, img_rgb)
         if sam2_segment_mask is None:
+            self.get_logger().info("SAM 2 failed to generate a mask. Rejected.")
             return
         
         mask_bool = (sam2_segment_mask > 0).astype(np.uint8)
@@ -253,6 +272,7 @@ class LeafDetectionNode(Node):
 
         # Compute 3D Pointcloud
         if len(leaf_pc) == 0:
+            self.get_logger().info("No valid points in leaf pointcloud. Rejected.")
             return
         self.publish_pointcloud(leaf_pc)
         self.get_logger().info(f"Generated and published pointcloud with {len(leaf_pc)} points.")
@@ -268,9 +288,15 @@ class LeafDetectionNode(Node):
         # Δy = -0.0546 + (0.2006 * |y - 0.5|) + (0.4081 * z)
         y = img_pose[1]
         z = dz
-        offset_y = -0.0546 + (0.2006 * abs(y - 0.5)) + (0.4081 * z)
+        offset_y = -0.0546 + (0.1 * abs(y - 0.5)) + (0.4081 * z)
+
+        x = img_pose[0]
+        offset_x = (0.1 * (x - 0.5)) 
+
+        # offset_y = -0.04 + (0.2006 * abs(y - 0.5)) + (0.4081 * z)
 
         dy = dy + offset_y
+        dx = dx + offset_x
 
 
         # --- USER CONFIRMATION ---
@@ -286,7 +312,9 @@ class LeafDetectionNode(Node):
                 elif self.button_array[4] == 1: # LB
                     self.get_logger().info("Detection Rejected.")
                     # Log the rejection before returning
-                    self.save_experiment_data(img_rgb, dx, dy, dz, img_pose, accepted=False)
+                    # self.save_experiment_data(img_rgb, dx, dy, dz, img_pose, 
+                    #               accepted=False, u=u_log, v=v_log, 
+                    #               p_dist=dist_val)
                     return
             
             # Keep the while loop from consuming 100% CPU on its thread
@@ -294,10 +322,7 @@ class LeafDetectionNode(Node):
 
         # Log the acceptance
 
-        u_log = int(seed_point[0, 0])
-        v_log = int(seed_point[0, 1])
-
-        self.save_experiment_data(img_rgb, dx, dy, dz, img_pose, 
+        self.save_experiment_data(seed_viz, dx, dy, dz, img_pose, 
                                   accepted=True, u=u_log, v=v_log, 
                                   p_dist=dist_val)
 
