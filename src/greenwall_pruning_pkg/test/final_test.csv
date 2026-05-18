@@ -1,0 +1,130 @@
+success, note [missed (too low) or multiple leaves]
+1,
+1,
+1,
+0,missed (leaf moved)
+1,,
+
+1,tape failed,
+1,
+1,
+1,tape failed
+Gripper motor stop
+0,missed (z too low)
+
+1,,
+1,,
+1,,
+1,tape fail,
+gripper motor stop
+0,too low y,
+
+1,,
+1,,
+1,tape failed
+(0,outside workspace)
+1,
+gripper motor stop
+0,missed (z too low because stalk)
+
+1,
+1,
+0, tape fail
+1, try again,
+1,
+0, leaf longer than prepluck dist
+
+1,
+1, leaf cut in half
+0, tape fail
+0, trtriedy again; pushed leaf
+0, tried again; pushed leaf
+gripper motor fail
+1,
+gripper motor fail
+0, z too low
+1, tape failed
+
+0, pushed leaf away
+0, tried again
+0, tried again
+1,
+0, too far left (high x)
+1, tried again with success
+0, leaf taller than prepicking distance
+1, 
+
+1,
+1, gripper failed
+1,
+0, grippedd correct leaf aswell as green leaf
+1,
+
+1
+1
+1
+0, missed too much right
+0, gripper failed
+0, tried again; gripper failed
+Fixed griper
+0, tried again; grabbed wrong green
+1, tried again
+No power
+1,
+
+57
+
+0 
+1
+1
+1
+0, tried again tape fail
+1, tried again
+1
+
+1
+1
+0
+1, tried again
+0, gripper fail
+0, tried again missed gripper psuhed aweay by leaves
+0, tried again missed gripper psuhed aweay by leaves
+1, 
+
+1
+1
+1
+1
+0, pushed away
+0, tried again pushed away
+
+1,
+1,
+0, too much right
+1,
+0, tried again
+1,
+1,
+
+84 (with the one ouside workspace removed)
+
+0, pushed leaf away
+1, tried again 
+1,
+0, pushed leaf away
+1, 
+1, leaf did fall out when releasing
+1,
+
+1, leaf didnt fall out when releasing but fell out on next prepicking
+1
+0, too far right
+1, a bit right
+1,
+1,
+
+1,
+1,
+1,
+1,
+0, got yellow bul also cut a piece of green leaf
