@@ -30,7 +30,7 @@ class GreenwallPruningNode(Node):
         # Create a dedicated callback group for the Orchestrator Service
         self.orchestrator_cb_group = MutuallyExclusiveCallbackGroup()
 
-        # Service server (Assign to the orchestrator group!)
+        # Service server (Assign to the orchestrator group)
         self.trigger_pruning_sequence_srv = self.create_service(
             CdprPos3DSrv, 
             '/greenwall_pruning/trigger_pruning_sequence', 

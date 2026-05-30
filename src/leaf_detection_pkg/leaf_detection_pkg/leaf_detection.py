@@ -32,7 +32,6 @@ class LeafDetectionNode(Node):
         super().__init__('leaf_detection')
         self.get_logger().info("Leaf Detection Node has been started.")
 
-        # --- LOGGING DIRECTORY SETUP ---
         # Creates a folder like ~/Thesis/experiment_logs/20260512_1030/
         home = os.path.expanduser("~")
         self.session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

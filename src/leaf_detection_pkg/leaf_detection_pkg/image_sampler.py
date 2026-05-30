@@ -12,7 +12,6 @@ class ImageSamplerNode(Node):
     def __init__(self):
         super().__init__('image_sampler_node')
         
-        # --- CONFIGURATION ---
         # Saves to ~/Thesis/captured_images/YYYYMMDD_HHMMSS/
         home = os.path.expanduser("~")
         session_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -48,8 +47,7 @@ class ImageSamplerNode(Node):
             self.get_logger().error(f"Failed to convert image: {e}")
 
     def joy_callback(self, msg: Joy):
-        # RB is typically index 5 on most Xbox/Logitech controllers
-        # We check for a "rising edge" (button was 0, now is 1)
+        # RB is index 5
         rb_button_state = msg.buttons[5]
 
         if rb_button_state == 1 and not self.rb_pressed_last:

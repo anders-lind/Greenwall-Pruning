@@ -58,7 +58,6 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         # self.pose[0:2] = self.pose[0:2] + delta_pos_scaled * self.movement_speed * self.control_loop_period
         # self.pose[2] = self.pose[2] + np.sign(delta_ori) * self.rotation_speed * self.control_loop_period
 
-        # 1. Feedforward: Where we are vs. Where we want to be next
         # Calculate ideal cable lengths for CURRENT pose
         current_ideal_vectors = self.inverse_kinematics(self.pose[0:2], self.pose[2])
         current_ideal_lengths = np.array([np.linalg.norm(l) for l in current_ideal_vectors])
@@ -74,7 +73,6 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         ff_velocities = -(desired_cable_lengths - current_ideal_lengths) / self.control_loop_period
         # ff_velocities = -(desired_cable_lengths - self.cable_lengths) / self.control_loop_period
 
-        # 2. Feedback: Correcting sensor error
         # Compare where the cables SHOULD be right now vs. where the encoders say they ARE
         self.cable_errors = current_ideal_lengths - self.cable_lengths 
         
@@ -82,7 +80,7 @@ class CDPRSpeedControlFeedbackNode(CDPRBaseControlNode):
         Kp_feedback = 2.0
         fb_velocities = -(self.cable_errors * Kp_feedback)
 
-        # 3. Total Velocity Command
+        # Total Velocity Command
         desired_cable_velocities = ff_velocities + fb_velocities
 
         # Convert to RPM and Motor Units

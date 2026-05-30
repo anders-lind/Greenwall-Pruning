@@ -82,17 +82,17 @@ class CDPRVisualizer(Node):
         """Updates the visualizer with the current self.cdpr_pose."""
         x, y, theta = self.cdpr_pose
         
-        # 1. Update End Effector Position and Rotation
+        # Update End Effector Position and Rotation
         ee_corners = self._get_end_effector_corners(x, y, theta)
         self.ee_patch.set_xy(ee_corners)
 
-        # 2. Update Target End Effector if available
+        # Update Target End Effector if available
         if hasattr(self, 'target_pose'):
             tx, ty, ttheta = self.target_pose
             target_corners = self._get_end_effector_corners(tx, ty, ttheta)
             self.target_ee_patch.set_xy(target_corners)
 
-        # 3. Update Cable Lines
+        # Update Cable Lines
         for i in range(4):
             # Connect anchor 'i' to end-effector corner 'i'
             self.cables[i].set_data(
@@ -100,7 +100,7 @@ class CDPRVisualizer(Node):
                 [self.anchors[i, 1], ee_corners[i, 1]]
             )
 
-        # 4. Draw the canvas
+        # Draw the canvas
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
     

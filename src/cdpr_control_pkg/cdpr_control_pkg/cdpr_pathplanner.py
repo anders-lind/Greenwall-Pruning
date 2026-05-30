@@ -158,10 +158,10 @@ class CDPRPathplannerNode(Node):
         if self.current_pose is None:
             return
 
-        # 2. SEARCHING STATE LOGIC
+        # SEARCHING STATE LOGIC
         if self.state == State.SEARCHING:
             
-            # Priority 1: Backtrack to breadcrumb if interrupted
+            # Priority 1: Backtrack to resume_pos if interrupted
             if self.needs_to_resume and self.resume_pos is not None:
                 target = self.resume_pos
                 self.active_target_pos = target
@@ -203,7 +203,6 @@ class CDPRPathplannerNode(Node):
                         self.current_target_idx = 0
                         self.get_logger().info("Search path completed. Looping back to start (bypassing homing).")
 
-        # 3. GOTO state logic bypasses the search targets 
 
         # Clip position and orienation to safe limits
         min_pos = np.array([self.end_effector_width/2.0, self.end_effector_bottom_margin])

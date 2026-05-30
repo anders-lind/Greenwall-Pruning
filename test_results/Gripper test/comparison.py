@@ -4,12 +4,12 @@ import pandas as pd
 import scipy.stats as stats
 
 # =====================================================================
-# CONFIGURATION: Optimized for Fisher's Exact Test & N = 32
+# CONFIGURATION:
 NUM_GROUPS = 2    # Fixed at 2 groups (Shallow vs Deep) for Fisher's Test
-BIN_WIDTH = 0.05  # Standardized width for every single histogram bar
+BIN_WIDTH = 0.05  # Standardized width for every histogram bar
 FONT_SIZE_MAIN = 24
 FONT_SIZE_SMALL = 22
-FONT_SIZE_TICKS = 14  # <--- NEW: Set your custom X and Y tick font size here
+FONT_SIZE_TICKS = 14  # Custom X and Y tick font size
 # =====================================================================
 
 # 1. Load the dataset
@@ -100,7 +100,6 @@ axes[0, 2].grid(axis="y", linestyle="--", alpha=0.5)
 # -----------------------------------------------------------------
 # ROWS 2 & 3: CATEGORIZED GROUPS
 # -----------------------------------------------------------------
-# We define specific bold math expressions for the group names to handle the labels cleanly
 math_labels = [r"$\mathbf{Closest\ leaves}$", r"$\mathbf{Farthest\ leaves}$"]
 
 for idx, group_name in enumerate(group_labels):
@@ -128,7 +127,7 @@ for idx, group_name in enumerate(group_labels):
     axes[plot_row, 2].hist(group_failure, bins=bin_edges, color="lightgray", edgecolor="black", alpha=0.8)
     axes[plot_row, 2].grid(axis="y", linestyle="--", alpha=0.5)
 
-# Add X-axis labels exclusively to the bottom row for a clean look
+# Add X-axis labels exclusively to the bottom row
 axes[TOTAL_ROWS - 1, 0].set_xlabel("Depth", fontsize=FONT_SIZE_MAIN)
 axes[TOTAL_ROWS - 1, 1].set_xlabel("Depth", fontsize=FONT_SIZE_MAIN)
 axes[TOTAL_ROWS - 1, 2].set_xlabel("Depth", fontsize=FONT_SIZE_MAIN)
@@ -136,7 +135,7 @@ axes[TOTAL_ROWS - 1, 2].set_xlabel("Depth", fontsize=FONT_SIZE_MAIN)
 # -----------------------------------------------------------------
 # UPDATE TICK FONT SIZES
 # -----------------------------------------------------------------
-# Iterates through every individual subplot window to dynamically change the tick labels
+# Iterates through every individual subplot window to change the tick labels
 for row in axes:
     for ax in row:
         ax.tick_params(axis='both', which='major', labelsize=FONT_SIZE_TICKS)

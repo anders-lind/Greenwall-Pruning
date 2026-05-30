@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 # ==========================================
-# CONFIGURATION: Set your custom bin width here
+# CONFIGURATION
 BIN_WIDTH = 0.04  # 0.02 0.04
 # ==========================================
 
