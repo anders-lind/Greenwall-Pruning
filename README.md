@@ -4,6 +4,22 @@ This was the final project for my Master of Science (MsC) in Engieering (Robot S
 
 This project designed and implemented a Greenwall pruning robot, which was able to travel around 1m X 1m area on a Greenwall and autonemously prune rotten leaves. The robot was consisted of a cable driven parallel robot (CDPR) with a specialized 3d printed gripper. To find the leaves color-based computer vision was used along with a segmentation model (SAM2).
 
+
+## Demonstation videos
+
+
+### Vision pipeline
+https://github.com/user-attachments/assets/682318f4-f667-46cc-a79f-41da49300cda
+
+### Pruning operation
+https://github.com/user-attachments/assets/4c02b32c-654f-4441-81c2-5ef7e5abf8df
+
+
+### Searching for a leaf, and then pruning it
+https://github.com/user-attachments/assets/4515f08c-76e1-426e-928a-3e6647255b26
+
+
+
 ## Setup
 
 1. Clone this repository
