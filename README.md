@@ -7,7 +7,6 @@ This project designed and implemented a Greenwall pruning robot, which was able 
 
 ## Demonstation videos
 
-
 ### Vision pipeline
 https://github.com/user-attachments/assets/682318f4-f667-46cc-a79f-41da49300cda
 
@@ -18,6 +17,12 @@ https://github.com/user-attachments/assets/4c02b32c-654f-4441-81c2-5ef7e5abf8df
 ### Searching for a leaf, and then pruning it
 https://github.com/user-attachments/assets/4515f08c-76e1-426e-928a-3e6647255b26
 
+
+# This doesn't work:
+![Doesn't work](Vision_pipeline.webp)
+
+# This works because we link to the image directly:
+![Works](https://gitlab.com/zipdox/git-readme-embed-test/-/raw/master/Vision_pipeline.webp)
 
 
 ## Setup
