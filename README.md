@@ -10,7 +10,8 @@ This project designed and implemented a Greenwall pruning robot, which was able 
   &nbsp;&nbsp;&nbsp;&nbsp;
   <img src="videos/Vision pipeline.gif" width="400px"/>
 </p>
-**OBS** Please be patient as the videos can takes a few moments to load in.
+
+**OBS:** _Please be patient as the videos can takes a few moments to load in._
 
 The video is also available in full length and high quality on google drive (https://drive.google.com/file/d/1_ytfkOsZ_eVM8iPWUoouuIQAFR-C1kbh/view)
 
