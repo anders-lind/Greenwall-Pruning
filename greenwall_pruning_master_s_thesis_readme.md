@@ -4,7 +4,21 @@
 [![ Python ](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
 [![ License ](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-An autonomous robotic system developed as a Master's Thesis project at the University of Southern Denmark (SDU) to automate the periodic maintenance of multi-floor indoor green walls. The system utilizes a 2D Cable-Driven Parallel Robot (CDPR) as a mobile platform, a hybrid vision pipeline combining classical statistics and deep learning (SAM 2) for target leaf perception, and a dedicated end-effector equipped with a pick-and-pull gripper mechanism.
+This was the final project for my Master of Science in Engieering in Robot Systems and was a collaboration between myself and Alex Ellegaard (https://github.com/alexellegaard/).
+
+The project designed and implemented a Greenwall pruning robot, which was able to travel around 1m X 1m area on a Greenwall and autonemously prune rotten leaves. The robot was consisted of a cable driven parallel robot (CDPR) with a specialized 3d printed gripper. To find the leaves color-based computer vision was used along with a segmentation model (SAM2).
+
+## Demonstation videos
+<p>
+  <img src="videos/Pruning.gif" width="400px"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="videos/Vision pipeline.gif" width="400px"/>
+</p>
+
+**OBS:** _Please be patient as the videos can takes a few moments to load in._
+
+The video is also available in full length and high quality on google drive (https://drive.google.com/file/d/1_ytfkOsZ_eVM8iPWUoouuIQAFR-C1kbh/view)
+
 
 ---
 
