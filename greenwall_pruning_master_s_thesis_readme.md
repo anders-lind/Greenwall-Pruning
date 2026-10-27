@@ -1,464 +1,209 @@
-# Autonomous Indoor Greenwall Pruning Robot
+# Design and Implementation of an Autonomous Robotic System for Pruning Indoor Green Walls
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![ROS 2](https://img.shields.io/badge/ROS2-Humble%2FIron-orange)](https://docs.ros.org/)
+[![ ROS 2 ](https://img.shields.io/badge/ROS%202-Humble-blue.svg)](https://docs.ros.org/en/humble/index.html)
+[![ Python ](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
+[![ License ](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-This repository contains the complete implementation and empirical validation for the Master’s Thesis project **"Design and Implementation of an Autonomous Robotic System for Pruning Indoor Green Walls"**, completed as part of the MSc in Robot Systems (Drones and Autonomous Systems) degree at the **University of Southern Denmark (SDU)** by **Alex Mejlvang Ellegaard** and **Anders Lind-Thomsen**, under the supervision of **Oskar Palinko**.
-
----
-
-## Demonstrations
-
-<p align="center">
-  <img src="videos/Pruning.gif" width="45%" title="Physical System Pruning Sequence"/>
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="videos/Vision pipeline.gif" width="45%" title="Perception Pipeline Output"/>
-</p>
-
-> **Note:** Extended high-definition video demonstrations of full autonomous runs, leaf detection, and pruning validation experiments are hosted on [Google Drive](https://drive.google.com/file/d/1_ytfkOsZ_eVM8iPWUoouuIQAFR-C1kbh/view?usp=drive_link).
+An autonomous robotic system developed as a Master's Thesis project at the University of Southern Denmark (SDU) to automate the periodic maintenance of multi-floor indoor green walls. The system utilizes a 2D Cable-Driven Parallel Robot (CDPR) as a mobile platform, a hybrid vision pipeline combining classical statistics and deep learning (SAM 2) for target leaf perception, and a dedicated end-effector equipped with a pick-and-pull gripper mechanism.
 
 ---
 
-## Executive Summary & Motivation
-
-Vertical indoor green walls offer substantial aesthetic, environmental, and psychological benefits in modern architectural spaces. At the Technical Faculty of SDU (Building 44), a multi-floor $9\text{ m} \times 15\text{ m}$ indoor green wall enhances air quality and thermal insulation. However, biological plants undergo constant life cycles, requiring periodic maintenance to remove dead or chlorotic (yellow) leaves.
-
-Human manual pruning is severely restricted due to structural height, tight access corridors, and safety regulations (e.g., union rules forbidding staff from reaching beyond bridge guardrails). While automated irrigation systems are widespread, no complete, fully autonomous physical solution existed for green wall leaf pruning.
-
-```
-+-----------------------------------------------------------------------------------+
-|                                 SYSTEM ARCHITECTURE                               |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|  +------------------------+  +------------------------+  +---------------------+  |
-|  |  Subsystem 1: Platform |  |  Subsystem 2: Vision   |  | Subsystem 3: Pruner |  |
-|  |                        |  |                        |  |                     |  |
-|  |   2D Planar Cable-     |  |   RGB-D Camera         |  |   2-DOF Custom      |  |
-|  |   Driven Parallel      |  |   Mahalanobis + SAM 2  |  |   "Grasp-and-Pull"  |  |
-|  |   Robot (CDPR)         |  |   Hybrid Pipeline      |  |   Mechanic Gripper  |  |
-|  +-----------+------------+  +-----------+------------+  +----------+----------+  |
-|              |                           |                          |             |
-|              +---------------------------+--------------------------+             |
-|                                          |                                        |
-|                                          v                                        |
-|                          +--------------------------------+                       |
-|                          |     Integrated System State    |                       |
-|                          |     Machine & Path Planning    |                       |
-|                          +--------------------------------+                       |
-+-----------------------------------------------------------------------------------+
-```
-
-To address this challenge, this project presents the **Pruning Robot**: a modular, end-to-end autonomous robotic platform operating on a 2D Planar **Cable-Driven Parallel Robot (CDPR)** framework. The platform navigates a vertical $1\text{ m}^2$ proof-of-concept workspace, utilizes a novel statistical-AI hybrid computer vision pipeline to isolate targets in real-time under variable lighting, and executes a customized "grasp-and-pull" mechanical pruning routine.
+## Table of Contents
+- [Project Overview](#project-overview)
+- [System Architecture](#system-architecture)
+- [Mobile Platform: Cable Driven Parallel Robot](#1-mobile-platform-cable-driven-parallel-robot-cdpr)
+- [Plant Perception & Leaf Detection](#2-plant-perception--leaf-detection)
+- [Leaf Pruning Manipulator](#3-leaf-pruning-manipulator)
+- [System Integration & Execution](#system-integration--execution)
+- [Results & System Validation](#results--system-validation)
+- [Future Work](#future-work)
+- [Setup & Running Code](#setup--running-code)
 
 ---
 
-## Deep Dive: System Architecture & Subsystems
+## Project Overview
+$\sqrt{3x-1}+(1+x)^2$
+Indoor vertical green walls improve indoor air quality, reduce cooling requirements, and boost occupant psychological well-being. However, maintaining large multi-floor plant installations requires periodic pruning of withered leaves. Accessing these vertical surfaces manually presents safety challenges (such as reaching across bridge guard rails) and high labor demands.
 
-The system is partitioned into three core structural and computational subsystems, followed by an overarching state machine integration layer.
+<img width="938" height="584" alt="canvas" src="https://github.com/user-attachments/assets/dc0d213c-7910-47c6-871f-64d24838b726" />
+
+
+This project proposes an autonomous pruning robot designed for complex vertical indoor spaces. As a proof of concept $a$, a $1\text{ m} \times 1\text{ m}$ planar prototype was developed to execute continuous leaf detection and autonomous removal sequence over plant foliage.
+
+---
+
+## System Architecture
+
+The overall robot architecture comprises three core operational subsystems integrated into a unified ROS 2 execution pipeline:
 
 ```
-                      +-----------------------------+
-                      |      Main ROS 2 Loop        |
-                      +--------------+--------------+
-                                     |
-             +-----------------------+-----------------------+
-             |                       |                       |
-             v                       v                       v
-     +---------------+       +---------------+       +---------------+
-     | 1. CDPR Platform|     | 2. Perception |       | 3. Manipulator|
-     |   Kinematics  |       |    Pipeline   |       |   Actuation   |
-     +---------------+       +---------------+       +---------------+
++-------------------------------------------------------------------------+
+|                              ROS 2 Node                                 |
+|                                                                         |
+|  +--------------------+    +---------------------+    +--------------+  |
+|  |   CDPR Kinematic   |    | Mahalanobis + SAM 2 |    | Pick-and-Pull|  |
+|  |  Position Control  |<-->|  Perception Pipeline|<-->| End Effector |  |
+|  +--------------------+    +---------------------+    +--------------+  |
++-------------------------------------------------------------------------+
 ```
 
 ---
 
-### Part 1: Mobile Platform — Cable Driven Parallel Robot (CDPR)
+## 1. Mobile Platform: Cable Driven Parallel Robot (CDPR)
 
-#### 1. System Topology & Kinematic Formulation
-A Cable-Driven Parallel Robot utilizes lightweight tensioned lines spooled by corner winches to position an End Effector (EE). For a planar configuration operating in $x, y$ with planar rotation $\theta$, the system possesses $n = 3$ Degrees of Freedom (DoF). Because flexible cables can only exert tensile forces ($t_i \ge 0$), achieving full static constraint requires $m = n + 1 = 4$ independent cables.
+To maintain a minimal structural footprint without blocking natural daylight or altering building aesthetics, a planar Cable-Driven Parallel Robot (CDPR) is chosen as the mobile platform.
 
-Let $\{G\}$ denote the global frame and $\{E\}$ denote the moving end effector frame. The position vector of the end effector center (Tool Center Point - TCP) is $p = [x, y]^\top$, and its orientation is $\theta$. The global base anchor points of the corner pulleys are $b_i \in \mathbb{R}^2$, and the cable connection vectors relative to the end effector center in frame $\{E\}$ are $q_i^E \in \mathbb{R}^2$ for $i \in \{1, 2, 3, 4\}$.
+<img width="820" height="517" alt="image" src="https://github.com/user-attachments/assets/bc2d36ef-377a-4c5e-8740-762adfbd9336" />
 
-```
-b_1 o=================================================o b_2
-    | \                                             / |
-    |  \                 q_1   q_2                 /  |
-    |   \                 o---o                   /   |
-    |    \                | E |                  /    |
-    |     \               o---o                 /     |
-    |      \             q_4   q_3             /      |
-    |       \                                 /       |
-b_4 o=================================================o b_3
-```
 
-The loop-closure equation for the $i$-th cable vector $l_i^G$ in global coordinates is given by:
-$$l_i^G = p^G - b_i^G + R_E^G(\theta) q_i^E$$
+### Kinematics and Inverse Kinematics
+The CDPR operates across 3 Degrees of Freedom (DoF): planar translations $p = [x, y]^T$ and dynamic platform rotation $\theta$. The unique vector transformation for the length of cable $i$ is formulated as:
 
-Where $R_E^G(\theta) \in SO(2)$ is the 2D rotation matrix:
-$$R_E^G(\theta) = \begin{bmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{bmatrix}$$
+$$l_i = \| p - b_i + R_E^G q_i \|$$
 
-The scalar cable length $l_i$ is the Euclidean norm:
-$$l_i = \|l_i^G\|_2 = \sqrt{(l_{i,x}^G)^2 + (l_{i,y}^G)^2}$$
+where:
+- $b_i$ denotes fixed frame cable anchor coordinates.
+- $q_i$ is the fixed displacement vector of anchor point $i$ on the moving platform.
+- $R_E^G$ is the $2\text{D}$ rotation matrix translating platform relative dynamics to global coordinates.
 
-#### 2. Forward Kinematics (FK)
-Because CDPRs are parallel mechanisms, their Inverse Kinematics (IK) are analytical and direct, whereas Forward Kinematics lack a closed-form solution. The current pose $x_{\text{present}} = [x, y, \theta]^\top$ is estimated numerically by minimizing the Mean Squared Error (MSE) between actual measured cable spooled lengths $\tilde{l}_i$ (from motor encoders) and theoretical lengths derived from the IK model:
+### Forward Kinematics
+Because cable-driven systems do not admit closed-form analytic solutions for forward kinematics, position estimation is solved numerically by minimizing the Mean Squared Error (MSE) of cable residuals:
 
-$$x_{\text{present}} = \arg\min_{x \in \mathbb{R}^2 \times S^1} \sum_{i=1}^{4} \left( \tilde{l}_i - \|p - b_i + R_E^G(\theta) q_i^E\| \right)^2$$
+$$\mathbf{x}_{\text{present}} = \arg \min_{\mathbf{p}, \theta} \frac{1}{4} \sum_{i=1}^{4} \left( l_i - \|\tilde{l}_i(\mathbf{p}, \theta)\| \right)^2$$
 
-This non-linear optimization is executed at $50\text{ Hz}$ using Sequential Least Squares Programming (SLSQP), seeded with the pose estimate $x_{t-1}$ from the preceding execution cycle to guarantee rapid convergence without local minima entrapment.
+Sequential Least Squares Programming (SLSQP) is used to update the position real-time, seeded by $x_{t-1}$.
 
-#### 3. Statics & Tension Structure Matrix
-The net wrench vector $u \in \mathbb{R}^3$ acting on the TCP consists of two Cartesian force components and a rotational torque:
-$$u = \begin{bmatrix} F_x & F_y & \tau_z \end{bmatrix}^\top$$
+### Control Approaches & Trade-offs
+1. **Kinematic Velocity Control**: Combines a linear trajectory generator with closed-loop cable correction:
+   $$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$$
+   *Performance:* Achieved sub-centimeter positional accuracy across **98.7%** of the workspace.
 
-The relationship mapping cable tension forces $t = [t_1, t_2, t_3, t_4]^\top$ to the Cartesian wrench $u$ is governed by the Structure Matrix $S(x) \in \mathbb{R}^{3 \times 4}$:
-$$u = S t$$
-
-Where $S$ is composed of normalized cable unit vectors $\hat{l}_i = \frac{l_i^G}{\|l_i^G\|}$ and moment arms:
-$$S = \begin{bmatrix} \hat{l}_{1,x} & \hat{l}_{2,x} & \hat{l}_{3,x} & \hat{l}_{4,x} \\ \hat{l}_{1,y} & \hat{l}_{2,y} & \hat{l}_{3,y} & \hat{l}_{4,y} \\ (R_E^G q_1^E \times \hat{l}_1)_z & (R_E^G q_2^E \times \hat{l}_2)_z & (R_E^G q_3^E \times \hat{l}_3)_z & (R_E^G q_4^E \times \hat{l}_4)_z \end{bmatrix}$$
-
-#### 4. Control Implementations & Comparative Evaluation
-Two distinct control architectures were built and empirically validated on the physical system:
-
-##### A. Kinematic Trajectory Controller
-Uses a feedforward Linear Trajectory Planner coupled with a parallel feedback Cable Correction Controller to regulate motor spooling velocities:
-$$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p \left( l_{\text{ideal}} - l_{\text{actual}} \right)$$
-
-This approach decouples Cartesian velocity from workspace distance, eliminating asymptotic deceleration and chattering via deadband thresholds ($\epsilon_p, \epsilon_\theta$).
-
-##### B. Force / Impedance Controller
-Maps Cartesian tracking errors to desired wrenches ($u_{\text{desired}}$) using an impedance model, resolving redundant cable tensions via the Moore-Penrose pseudoinverse $S^\dagger$ and a Torque Distribution Algorithm operating in the 1D null space $N(S)$:
-$$t_{\text{desired}} = S^\dagger u_{\text{desired}} + \lambda n$$
-
-Where $n \in \text{null}(S)$ and $\lambda \in \mathbb{R}$ is calculated dynamically to enforce $t_i \ge T_{\text{min}} = 5\text{ N}$.
-
-```
-                 +-------------------------------------------------------+
-                 |                 EXPERIMENTAL RESULTS                  |
-                 +-------------------------------------------------------+
-                 | Control Type | Metric            | Value              |
-                 +--------------+-------------------+--------------------+
-                 | Kinematic    | Reachable Area    | 0.7301 m² (99.5%)  |
-                 |              | Accurate (<10mm)  | 0.7244 m² (98.7%)  |
-                 |              | Median XTE        | 1.8 mm             |
-                 +--------------+-------------------+--------------------+
-                 | Force        | Reachable Area    | 0.1954 m² (26.6%)  |
-                 |              | Accurate (<10mm)  | 0.0989 m² (13.5%)  |
-                 |              | Median XTE        | 12.0 mm            |
-                 +-------------------------------------------------------+
-```
-
-```
-           KINEMATIC CONTROL WORKSPACE              FORCE CONTROL WORKSPACE
-         +----------------------------+          +----------------------------+
-         |############################|          | . . . . . . . . . . . . . .|
-         |############################|          | . . . . . +------+ . . . . |
-         |############################|          | . . . . . |Accurate| . . . |
-         |############################|   vs     | . . . . . +------+ . . . . |
-         |############################|          | . . Reachable . . . . . . .|
-         |############################|          | . . . . . . . . . . . . . .|
-         +----------------------------+          +----------------------------+
-          98.7% Sub-centimeter Accuracy            13.5% Sub-centimeter Accuracy
-```
-
-**Experimental Insight:** Force control failed due to unmodeled internal mechanical friction in the Dynamixel XM540-W270 actuators (272.5:1 gear reduction ratio). The unmodeled gear box friction destroyed the force balance assumptions, leading to asymmetric tension spikes $>40\text{ N}$ that triggered system safety shutdowns. Conversely, **Kinematic Control achieved sub-centimeter positioning across 98.7% of the theoretical workspace**, making it the selected motion engine.
+2. **Force-Based Dynamic Control**: Evaluated using a Torque Distribution Algorithm utilizing the structure matrix null space $S \cdot \mathbf{t} = \mathbf{u}$:
+   $$\mathbf{t}_{\text{desired}} = \mathbf{t}^\dagger + \lambda \mathbf{n}$$
+   *Outcome:* Significant internal gear friction within high-reduction servo motors (272.5:1 ratio) led to asymmetric forces, limiting the accurate workspace area to 13.5%. Kinematic velocity control was selected for production integration.
 
 ---
 
-### Part 2: Leaf Detection — Camera-Based Plant Perception
+## 2. Plant Perception & Leaf Detection
 
-To isolate chlorotic target leaves under variable natural ambient light, a high-speed, real-time perception pipeline was engineered.
+Target identification requires isolating withered yellow leaves from vibrant background foliage under fluctuating natural lighting conditions.
 
-```
-  Raw RGB-D Frame        Mahalanobis Distance         Morphological Cleanup
-+-----------------+     +--------------------+     +------------------------+
-|                 |     |                    |     |                        |
-|   [ Green Wall  |     |   [ High-Prob      |     |   [ Noise Filtered     |
-|     Plants ]    +---->+     Target Seeds ] +---->+     Mask & Centroid ]  |
-|                 |     |                    |     |                        |
-+-----------------+     +--------------------+     +-----------+------------+
-                                                                |
-                                                                v
-   Target 3D Point      Color Verification         SAM 2 Segmentation
-+-----------------+     +--------------------+     +------------------------+
-|                 |     |                    |     |                        |
-|  [ Pose in {G}  |<----+ [ 15th Percentile  |<----+ [ High-Precision Mask  |
-|    Frame ]      |     |   Color Check ]    |     |   Generation ]         |
-+-----------------+     +--------------------+     +------------------------+
-```
+<img width="962" height="593" alt="image" src="https://github.com/user-attachments/assets/c369613c-951d-4324-ba9c-7a32624658e4" />
 
-#### 1. Statistical Color Space Segmentation (Mahalanobis Distance)
-Standard Euclidean distance in RGB/HSV spaces fails under dynamic lighting because it ignores inter-channel covariance. The system uses the **Mahalanobis Distance** ($D_M$), which measures distance relative to a calibrated Gaussian distribution of yellow leaf colors:
 
-$$D_M(x) = \sqrt{(x - \mu)^\top \Sigma^{-1} (x - \mu)}$$
 
-Where $x \in \mathbb{R}^3$ is a pixel color vector in $LAB$ color space, $\mu \in \mathbb{R}^3$ is the sample mean vector of chlorotic plant matter, and $\Sigma \in \mathbb{R}^{3 \times 3}$ is the covariance matrix. A threshold $d_{\text{thresh}} = 2.5$ isolates target candidate pixels.
+### Mahalanobis-Prompted SAM 2 Pipeline
+To balance processing speed with high geometric fidelity, a hybrid zero-shot vision architecture was developed:
 
-#### 2. Seeded Segment Anything Model 2 (SAM 2) Hybrid Pipeline
-While Mahalanobis thresholding is extremely fast ($\sim 12\text{ ms}$), its raw masks lack fine geometric edge accuracy. Directly applying Meta's SAM 2 foundational model automatically across the whole frame yields precise contours but requires unacceptable processing time ($\sim 8.26\text{ s}$ per frame on a GTX 1650Ti / Jetson Orin Nano class GPU).
+1. **Statistical Pre-filtering**: Pass raw camera frames through Mahalanobis Distance thresholding in CieLAB color space to obtain sample covariance distributions ($\mathbf{\hat{\Sigma}}$):
+   $$D_i = \sqrt{(\mathbf{c}_i - \mathbf{c}_t)^T \mathbf{\Sigma}^{-1} (\mathbf{c}_i - \mathbf{c}_t)}$$
+2. **Foundational Prompting**: Extract Euclidean distance maxima on the pre-filtered candidate region to derive spatial seed coordinates.
+3. **Instance Masking**: Supply seed coordinates to Meta’s Segment Anything Model 2 (SAM 2) to obtain clean edge contours without domain fine-tuning.
+4. **Color Verification**: Compute color percentiles on isolated mask bounds to discard false positive predictions.
 
-To solve this, we designed a **Hybrid Pipeline**:
-1. **Fast Candidate Identification:** The Mahalanobis module computes the candidate mask and applies distance-transform peak detection to calculate candidate centroids $(u_c, v_c)$.
-2. **Promoted Visual Prompting:** These centroids serve as positive prompt points fed directly into SAM 2.
-3. **Refinement & Verification:** SAM 2 outputs a high-definition boundary mask around the prompt. A final color-verification check evaluates the 15th percentile $LAB$ vector within the SAM 2 mask to discard false-positive prompts (e.g., wooden support structures or bright leaf veins).
+### Spatial Reconstruction
+Pixel mask centroids $(u_i, v_i)$ are converted to global 3D coordinates using camera intrinsic parameters $K$ derived from pinhole projection, coupled with depth maps $Z_i$:
 
-```
-+-----------------------------------------------------------------------------------------+
-|                              PERCEPTION EVALUATION BENCHMARK                            |
-+-----------------------------------------------------------------------------------------+
-| Pipeline Variant             | Detection Accuracy (%) | Mask Quality (IoU %) | Time (s) |
-+------------------------------+------------------------+----------------------+----------+
-| Mahalanobis Only             | 68.7%                  | 36.1%                | 0.0120 s |
-| SAM 2 Automatic              | 66.0%                  | 79.4%                | 8.2611 s |
-| **Combined Hybrid (Ours)**   | **76.6%**              | **87.7%**            | 0.6135 s |
-+-----------------------------------------------------------------------------------------+
-```
+$$x_i^C = \frac{(u_i - c_x) \cdot Z_i}{f_x}, \quad y_i^C = \frac{(v_i - c_y) \cdot Z_i}{f_y}$$
 
-**Statistical Significance:** Friedman non-parametric testing followed by Wilcoxon signed-rank post-hoc analysis confirmed that the Hybrid Pipeline achieves **statistically superior target accuracy ($p = 0.011$) and IoU quality ($p = 0.038$)** relative to standalone methods, while executing **$13.5\times$ faster than full SAM 2**.
-
-#### 3. Spatial Coordinate Transformations (Pinhole & Frames)
-Using the Intel RealSense D435 RGB-D sensor, the 2D pixel mask is projected into $3D$ space. For each pixel $(u_i, v_i)$ with registered depth $z_i^C$, the spatial coordinate $p^C = [x^C, y^C, z^C]^\top$ in the Camera Frame $\{C\}$ is:
-
-$$x^C = \frac{(u_i - c_x) \cdot z_i^C}{f_x}, \quad y^C = \frac{(v_i - c_y) \cdot z_i^C}{f_y}$$
-
-Where $f_x, f_y$ and $c_x, c_y$ represent the intrinsic focal lengths and principal point. The 3D point cloud of the target leaf is mapped to global CDPR coordinates $\{G\}$ via rigid frame transformations:
-
-$$p^G = R_E^G(\theta) \left( R_C^E p^C + t_C^E \right) + p_{\text{TCP}}^G$$
-
-Where $(R_C^E, t_C^E)$ represents the extrinsic transformation from camera to end-effector frame.
+Point clouds are sequentially transformed through end-effector frame $\{E\}$ into global system coordinates $\{G\}$.
 
 ---
 
-### Part 3: Leaf Pruning — Manipulator Design
+## 3. Leaf Pruning Manipulator
 
-```
-         GRASP PHASE                           PULL PHASE
-     +-----------------+                   +-----------------+
-     |   Two-Finger    |                   |   Manipulator   |
-     |   Jaws Open     |                   |   Retracts      |
-     |                 |                   |                 |
-     |    /       \    |                   |     |   |       |
-     |   /  LEAF   \   |  == Closes ==>    |     |[L]|       |  == Retracts ==> (Petiole Detaches)
-     |  o           o  |                   |     |   |       |
-     |                 |                   |     |   |       |
-     +-----------------+                   +-----------------+
-```
+Executing leaf removal requires a compact, targeted mechanical system mounted directly on the CDPR end-effector platform.
 
-#### 1. "Grasp-and-Pull" Mechanical Principle
-Unlike agricultural harvesters that utilize complex rotary blades, shears, or laser cutters, green wall maintenance benefits from avoiding active cutting edges (which dull rapidly, introduce wire safety hazards, and risk damaging neighboring healthy vines).
+<img width="517" height="490" alt="image" src="https://github.com/user-attachments/assets/0ab2e236-fb35-4a6f-9abb-c35285865770" />
 
-Botanical testing revealed that plant leaf petioles exhibit weak tensile shear limits when pulled along their normal growth orientation. The end-effector is designed as a custom **Two-Finger Mechanized Gripper** executing a deterministic **Grasp-and-Pull** sequence:
-1. **Approach:** End-effector aligns with target leaf center using depth spatial feedback.
-2. **Grasp:** Parallel 3D-printed fingers with high-friction silicone pads actuate to pinch the leaf blade.
-3. **Pull:** The CDPR platform executes a quick feedforward linear vector displacement away from the vertical plane, severing the petiole cleanly at the stem node without requiring additional arm DoFs.
 
-#### 2. Experimental Subsystem Validation
-Isolated manipulator trials yielded an overall grasping success rate of **75%** ($\text{Wilson Score Interval}: 72\% \pm 14\%$). Accuracy varied significantly by target depth:
-* **Closest Leaves (Front Canopy):** **90% Success** ($\pm 10\%$)
-* **Deepest Leaves (Back Canopy):** **50% Success** ($\pm 22\%$)
+### Mechanical Design & Strategy
+- **Pruning Method**: A pick-and-pull grasping technique is utilized to strip leaves from nodes without requiring bulky high-torque rotary blades.
+- **Gripper Kinematics**: A dual-finger gear-driven mechanism optimized to squeeze leaf stems firmly before executing a controlled backward pull displacement using the CDPR motion platform.
+- **Form Factor**: Designed under strict operational envelopes: total end-effector thickness is under $30\text{ cm}$ to navigate guard rails and narrow structural clearances safely.
 
 ---
 
-## Full System Integration & Empirical Validation
+## System Integration & Execution
 
-```
-                                SYSTEM STATE MACHINE
- 
-+--------------+    Scan Command    +--------------+   Target Found   +--------------+
-|              +------------------->+              +----------------->+              |
-|  IDLE STATE  |                    | SCANNING PATH|                  | APPROACH LEAF|
-|              |<-------------------+              |                  |              |
-+--------------+   Scan Complete    +--------------+                  +------+-------+
-                                                                             |
-                                                                             | In Position
-                                                                             v
-+--------------+    Retry Count     +--------------+   Pulls Petiole  +--------------+
-|              |<-------------------+              |<-----------------+              |
-|  RETRACT /   |       < Max        | PRUNING GRASP|                  | EXECUTE PULL |
-| EVALUATE MASK|                    |              |                  |              |
-+-------+------+                    +--------------+                  +--------------+
-        |
-        | Retry Exceeded / Success
-        v
-+--------------+
-| RESUME SCAN  |
-+--------------+
-```
+The system integrates path planning, vision processing, and end-effector motion into an automated loop:
 
-### Integrated Test Setup
-The full system integration was evaluated on a physical $1\text{ m}^2$ indoor green wall mockup under ambient indoor environment conditions.
-* **Trials Conducted:** 17 full autonomous operations.
-* **Total Target Leaves Evaluated:** 85 individual chlorotic leaves.
-* **Total Pruning Execution Attempts:** 101 pruning events.
+<img width="872" height="379" alt="image" src="https://github.com/user-attachments/assets/e454402d-0db3-4abe-90bd-0f27a489d994" />
 
-```
-+-----------------------------------------------------------------------------------------+
-|                                INTEGRATED SYSTEM RESULTS                                |
-+-----------------------------------------------------------------------------------------+
-| Metric                                              | Value                             |
-+-----------------------------------------------------+-----------------------------------+
-| Single-Attempt Success Rate (Per Pruning Event)     | **70.3%** (71 / 101)              |
-| Multi-Attempt Cumulative Success Rate (Per Leaf)    | **83.5%** (71 / 85)               |
-| Median Process Time per Target                      | 14.2 s                            |
-+-----------------------------------------------------------------------------------------+
-```
 
-### Pareto Analysis of Failure Modes
-A statistical breakdown of the 30 failed pruning attempts identified four root causes:
-
-```
-+-----------------------------------------------------------------------------------------+
-| PARETO FAILURE BREAKDOWN                                                                |
-+-----------------------------------------------------------------------------------------+
-| Cause                               | Count | Relative % | Cumulative %                 |
-+-------------------------------------+-------+------------+------------------------------+
-| 1. Pushed Leaf Away                 | 11    | 36.7%      | 36.7%                        |
-| 2. Positional Miss                  | 9     | 30.0%      | 66.7%                        |
-| 3. Gripper Slippage / Fail          | 6     | 20.0%      | 86.7%                        |
-| 4. Other (Occlusions/Deep Depth)    | 4     | 13.3%      | 100.0%                       |
-+-----------------------------------------------------------------------------------------+
-```
-
-```
- 100% +-------------------------------------------------------+--+
-      |                                                  *----'  |
-  80% |                                            *----'        |  C
-      |                                      *----'              |  U
-  60% |                                *----'                    |  M
-      |                          *----'                          |  U
-  40% |                    *----'                                |  L
-      |              *----'                                      |  A
-  20% |        *----'                                            |  T
-      |  *----'                                                  |  I
-   0% +--+----------------------+------------------+-------------+--+
-         |  Pushed Leaf Away    | Positional Miss  | Gripper Fail|
-```
-
-### Statistical Analysis: Key Finding
-Hypothesis testing revealed a statistically significant relationship between **image plane target distance ($p$) and pruning success ($p = 0.0429*$)**:
-* Targets located **near the optical center** ($\le 167.5\text{ px}$) achieved an **80.4% success rate**.
-* Targets located **near the image periphery** ($> 167.5\text{ px}$) dropped to a **60.0% success rate**.
-
-**Root Cause:** This drop in accuracy stems from unmodeled dynamic shifts in the physical cable exit points ($b_i$) on the corner pulleys as the CDPR moves away from its central origin, introducing systematic angular drift into the Forward Kinematic estimator.
+1. **Coverage Raster Scan**: The CDPR traverses the wall face following optimized overlapping horizontal scanning rows.
+2. **Visual Detection Trigger**: On-the-fly camera inference captures yellow leaves, halting platform movement.
+3. **Approach Trajectory**: Inverse kinematics direct the platform TCP toward the leaf target vector.
+4. **Grasping & Pruning Cycle**: The manipulator clamps the stem, executes a pulling movement, drops the leaf, and returns the platform to the scanning sequence.
 
 ---
 
-## Conclusion & Future Work
+## Results & System Validation
 
-### Conclusion
-This thesis presented the successful design, building, and empirical validation of a proof-of-concept autonomous green wall pruning robot.
-1. The **CDPR platform** governed by kinematic control achieved sub-centimeter positioning accuracy across **98.7%** of its workspace.
-2. The **Hybrid Perception Pipeline (Mahalanobis + SAM 2)** solved the speed-quality trade-off, operating in **$0.61\text{ s}$** with an **87.7% IoU**.
-3. The integrated **Grasp-and-Pull system** proved the viability of fully automated plant maintenance, successfully removing **83.5%** of target yellow leaves.
+The fully integrated autonomous system was evaluated in realistic experimental trials comprising **101 total pruning attempts** over **85 distinct target leaves**.
 
-### Future Work & Scaling Up
+### Performance Metrics
+- **Single-Attempt Success Rate**: **70.3%**
+- **Cumulative Retry Success Rate**: **83.5%**
+- **CDPR Kinematic Coverage**: **98.7%** sub-centimeter workspace tracking accuracy.
+- **Perception Segmentation Quality (IoU)**: **79.4%** achieved via prompted SAM 2, down from an 8.26-second unprompted inference latency to interactive speeds.
 
-```
-+-----------------------------------------------------------------------------------+
-|                                 FUTURE ROADMAP                                    |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|  +--------------------+    +--------------------+    +-------------------------+  |
-|  | 1. CDPR Precision  |    | 2. Actuation      |    | 3. Perception & Arm     |  |
-|  |                    |    |                    |    |                         |  |
-|  | * Dynamic pulley   |    | * Direct-drive BLDC|    | * Visual servoing loop  |  |
-|  |   exit-point model |    |   motors (no gear  |    | * Multi-DoF wrist for   |  |
-|  | * Onboard IMU pose |    |   friction)        |    |   angled canopy access  |  |
-|  |   fusion via EKF   |    | * Active closed-   |    | * Short-range depth     |  |
-|  |                    |    |   loop force control|   |   sensor (< 20 cm)      |  |
-|  +--------------------+    +--------------------+    +-------------------------+  |
-+-----------------------------------------------------------------------------------+
-```
-
-1. **Kinematic & Dynamic Model Refinement:** Implement explicit geometric modeling of variable pulley exit vectors ($b_i(\theta)$) to eliminate structural errors near workspace borders. Integrate an IMU on the end effector for Extended Kalman Filtering (EKF) pose estimation.
-2. **Direct-Drive Hardware Upgrade:** Transition from high-gear servo motors to low-friction Direct-Drive BLDC motors with active load-cell tension sensing. This will enable real-time force control without friction instability.
-3. **In-Hand Visual Servoing:** Introduce a secondary visual servoing control loop on the end effector to compensate for CDPR sway during the final approach phase.
-4. **Full-Scale Building Deployment:** Scale the physical frame to the full multi-story ($9\text{ m} \times 15\text{ m}$) green wall layout at SDU, incorporating intermediate cable guide rails.
+### Key Analysis & Findings
+- **Forward Kinematic Errors**: Statistical analysis confirmed accuracy changes proportional to target depth from the image plane. Cable pulley anchor point displacement ($b_i$ drift) under load represents the main structural source of position error near workspace boundaries.
+- **Drive Gear Friction**: Dynamixel current-based dynamic force control requires direct-drive setups; friction forces heavily distort unconstrained torque control.
 
 ---
 
-## Installation & Setup Guide
+## Future Work
 
-### System Requirements
-* **OS:** Ubuntu 22.04 LTS (or Windows 10/11 with WSL2)
-* **Python Version:** Python 3.10 or higher
-* **CUDA:** Version 11.8 or higher (NVIDIA GPU recommended for SAM 2 inference)
-* **Middleware:** ROS 2 Humble / Iron
-
-### Step-by-Step Installation
-
-1. **Clone the Repository:**
-   ```bash
-   git clone https://github.com/alexellegaard/Greenwall-Pruning.git
-   cd Greenwall-Pruning
-   ```
-
-2. **Install Dynamixel SDK:**
-   > **Important:** Install outside virtual environments if system-wide serial access is required.
-   ```bash
-   pip install dynamixel_sdk --break-system-packages
-   ```
-
-3. **Configure Hardware Serial Permissions:**
-   Grant read/write privileges to the Dynamixel USB interface (typically `/dev/ttyUSB0`):
-   ```bash
-   sudo chmod a+rw /dev/ttyUSB*
-   ```
-   *(Optional)* To make permissions permanent across reboots, add your user to the `dialout` group:
-   ```bash
-   sudo usermod -aG dialout $USER
-   ```
-
-4. **Install Segment Anything Model 2 (SAM 2):**
-   Follow the official installation protocol from Meta Research:
-   ```bash
-   git clone https://github.com/facebookresearch/sam2.git
-   cd sam2
-   pip install -e .
-   ```
-
-5. **Download Pre-trained Weights & Verify Hardware:**
-   Ensure the SAM 2 checkpoint (`sam2_hiera_small.pt` or `sam2_hiera_large.pt`) is placed inside the `checkpoints/` directory within the perception ROS 2 package workspace.
+- **Dynamic Cable Modeling**: Incorporating variable exit points ($b_i$) on corner pulleys within the kinematic loop to eliminate position drift at extreme edges.
+- **Visual Feedback Servo Control**: Implementing direct visual tracking inside the closed loop to adjust grasping trajectories dynamically prior to stem engagement.
+- **High-Torque Direct Drive Actuation**: Upgrading winch hardware to low-friction motors to enable continuous dynamic force control and tension monitoring.
+- **Scaling to Building Scale**: Expanding system structural frames to span multi-floor plant installations ($9\text{ m} \times 15\text{ m}$).
 
 ---
 
-## Repository Structure
+## Setup & Running Code
 
+### Prerequisites
+- ROS 2 Humble
+- Python 3.10+
+- CUDA-compatible GPU (recommended for SAM 2 inference)
+
+### Installation
+
+1. Clone the repository into your ROS 2 workspace:
+```bash
+cd ~/ros2_ws/src
+git clone https://github.com/alexellegaard/Greenwall-Pruning.git
 ```
-Greenwall-Pruning/
-├── config/                  # Kinematic calibration and baseline parameters
-├── data/                    # Evaluation benchmark datasets (150 annotated images)
-├── docs/                    # Thesis documentation, schematics, and CAD files
-├── src/
-│   ├── cdpr_controller/     # ROS 2 nodes for Kinematic and Force control
-│   ├── leaf_detection/      # Mahalanobis + SAM 2 hybrid vision pipeline
-│   └── pruning_gripper/     # End-effector serial interface and sequence logic
-├── videos/                  # Demonstration GIFs and local benchmark assets
-├── README.md                # Project README file
-└── setup.py                 # Workspace build script
+
+2. Install dependencies:
+```bash
+cd ~/ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+pip install -r src/Greenwall-Pruning/requirements.txt
 ```
 
----
+3. Build the workspace:
+```bash
+colcon build --symlink-install
+source install/setup.bash
+```
 
-## Authors & Citation
+### Running the System
 
-**Authors:**
-* **Alex Mejlvang Ellegaard** — [GitHub](https://github.com/alexellegaard) | *MSc Robot Systems, SDU*
-* **Anders Lind-Thomsen** — [GitHub](https://github.com/AndersLind-Thomsen) | *MSc Robot Systems, SDU*
+1. Launch the CDPR controller hardware interface:
+```bash
+ros2 launch cdpr_control cdpr_control.launch.py
+```
 
-**Academic Supervisor:**
-* **Oskar Palinko** — *Associate Professor, Maersk Mc-Kinney Moller Institute, SDU*
+2. Start the leaf detection perception node:
+```bash
+ros2 launch leaf_detection perception.launch.py
+```
 
-If you utilize this work or reference our methodology, please cite:
-
-```bibtex
-@mastersthesis{EllegaardLindThomsen2026GreenwallPruning,
-  author       = {Alex Mejlvang Ellegaard and Anders Lind-Thomsen},
-  title        = {Design and Implementation of an Autonomous Robotic System for Pruning Indoor Green Walls},
-  school       = {University of Southern Denmark (SDU), Maersk Mc-Kinney Moller Institute},
-  year         = {2026},
-  month        = {June},
-  type         = {Master's Thesis}
-}
+3. Execute the autonomous pruning state machine:
+```bash
+ros2 run pruning_runner system_integration_node
 ```
