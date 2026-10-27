@@ -74,9 +74,9 @@ $$\mathbf{x}_{\text{present}} = \arg \min_{\mathbf{p}, \theta} \frac{1}{4} \sum_
 Sequential Least Squares Programming (SLSQP) is used to update the position real-time, seeded by $x_{t-1}$.
 
 ### Control Approaches & Trade-offs
-1. **Kinematic Velocity Control**: Combines a $a$linear trajectory generator with closed-loop cable correction:
-   $$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$$
-   *Performance:* Achieved sub-centimeter positional accuracy across **98.7%** of the workspace.
+**Kinematic Velocity Control**: Combines a linear trajectory generator with closed-loop cable correction:
+$$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$$
+*Performance:* Achieved sub-centimeter positional accuracy across **98.7%** of the workspace.
 
 2. **Force-Based Dynamic Control**: Evaluated using a Torque Distribution Algorithm utilizing the structure matrix null space $S \cdot \mathbf{t} = \mathbf{u}$:
    $$\mathbf{t}_{\text{desired}} = \mathbf{t}^\dagger + \lambda \mathbf{n}$$
