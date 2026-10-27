@@ -28,7 +28,7 @@ Indoor vertical green walls improve indoor air quality, reduce cooling requireme
 <img width="938" height="584" alt="canvas" src="https://github.com/user-attachments/assets/dc0d213c-7910-47c6-871f-64d24838b726" />
 
 
-This project proposes an autonomous pruning robot designed for complex vertical indoor spaces. As a proof of concept $a$, a $1\text{ m} \times 1\text{ m}$ planar prototype was developed to execute continuous leaf detection and autonomous removal sequence over plant foliage.
+This project proposes an autonomous pruning robot designed for complex vertical indoor spaces. As a proof of concept, a $1\text{ m} \times 1\text{ m}$ planar prototype was developed to execute continuous leaf detection and autonomous removal sequence over plant foliage.
 
 ---
 
@@ -74,8 +74,8 @@ $$\mathbf{x}_{\text{present}} = \arg \min_{\mathbf{p}, \theta} \frac{1}{4} \sum_
 Sequential Least Squares Programming (SLSQP) is used to update the position real-time, seeded by $x_{t-1}$.
 
 ### Control Approaches & Trade-offs
-1. **Kinematic Velocity Control**: Combines a linear trajectory generator with closed-loop cable correction:
-   $\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$
+1. **Kinematic Velocity Control**: Combines a $a$linear trajectory generator with closed-loop cable correction:
+   $$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$$
    *Performance:* Achieved sub-centimeter positional accuracy across **98.7%** of the workspace.
 
 2. **Force-Based Dynamic Control**: Evaluated using a Torque Distribution Algorithm utilizing the structure matrix null space $S \cdot \mathbf{t} = \mathbf{u}$:
