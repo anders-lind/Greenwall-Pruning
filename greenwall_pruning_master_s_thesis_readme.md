@@ -10,10 +10,9 @@ An autonomous robotic system developed as a Master's Thesis project at the Unive
 
 ## Table of Contents
 - [Project Overview](#project-overview)
-- [System Architecture](#system-architecture)
-- [Mobile Platform: Cable Driven Parallel Robot](#1-mobile-platform-cable-driven-parallel-robot-cdpr)
-- [Plant Perception & Leaf Detection](#2-plant-perception--leaf-detection)
-- [Leaf Pruning Manipulator](#3-leaf-pruning-manipulator)
+- [Mobile Platform: Cable Driven Parallel Robot](#mobile-platform-cable-driven-parallel-robot-cdpr)
+- [Plant Perception & Leaf Detection](#plant-perception--leaf-detection)
+- [Leaf Pruning Manipulator](#leaf-pruning-manipulator)
 - [System Integration & Execution](#system-integration--execution)
 - [Results & System Validation](#results--system-validation)
 - [Future Work](#future-work)
@@ -22,39 +21,20 @@ An autonomous robotic system developed as a Master's Thesis project at the Unive
 ---
 
 ## Project Overview
-$\sqrt{3x-1}+(1+x)^2$
 Indoor vertical green walls improve indoor air quality, reduce cooling requirements, and boost occupant psychological well-being. However, maintaining large multi-floor plant installations requires periodic pruning of withered leaves. Accessing these vertical surfaces manually presents safety challenges (such as reaching across bridge guard rails) and high labor demands.
 
-<img width="938" height="584" alt="canvas" src="https://github.com/user-attachments/assets/dc0d213c-7910-47c6-871f-64d24838b726" />
+<img width="800" alt="canvas" src="https://github.com/user-attachments/assets/dc0d213c-7910-47c6-871f-64d24838b726" />
+
 
 
 This project proposes an autonomous pruning robot designed for complex vertical indoor spaces. As a proof of concept, a $1\text{ m} \times 1\text{ m}$ planar prototype was developed to execute continuous leaf detection and autonomous removal sequence over plant foliage.
 
 ---
 
-## System Architecture
-
-The overall robot architecture comprises three core operational subsystems integrated into a unified ROS 2 execution pipeline:
-
-```
-+-------------------------------------------------------------------------+
-|                              ROS 2 Node                                 |
-|                                                                         |
-|  +--------------------+    +---------------------+    +--------------+  |
-|  |   CDPR Kinematic   |    | Mahalanobis + SAM 2 |    | Pick-and-Pull|  |
-|  |  Position Control  |<-->|  Perception Pipeline|<-->| End Effector |  |
-|  +--------------------+    +---------------------+    +--------------+  |
-+-------------------------------------------------------------------------+
-```
-
----
-
-## 1. Mobile Platform: Cable Driven Parallel Robot (CDPR)
-
+## Mobile Platform: Cable Driven Parallel Robot (CDPR)
 To maintain a minimal structural footprint without blocking natural daylight or altering building aesthetics, a planar Cable-Driven Parallel Robot (CDPR) is chosen as the mobile platform.
 
-<img width="820" height="517" alt="image" src="https://github.com/user-attachments/assets/bc2d36ef-377a-4c5e-8740-762adfbd9336" />
-
+<img height="450" alt="image" align=center src="https://github.com/user-attachments/assets/612459eb-e3d2-4f26-8a76-a7a8d9e8cae8" />
 
 ### Kinematics and Inverse Kinematics
 The CDPR operates across 3 Degrees of Freedom (DoF): planar translations $p = [x, y]^T$ and dynamic platform rotation $\theta$. The unique vector transformation for the length of cable $i$ is formulated as:
@@ -66,6 +46,9 @@ where:
 - $q_i$ is the fixed displacement vector of anchor point $i$ on the moving platform.
 - $R_E^G$ is the $2\text{D}$ rotation matrix translating platform relative dynamics to global coordinates.
 
+<img height="350" alt="image" src="https://github.com/user-attachments/assets/ba626645-e1cb-4274-8555-45d17061a729" />
+
+
 ### Forward Kinematics
 Because cable-driven systems do not admit closed-form analytic solutions for forward kinematics, position estimation is solved numerically by minimizing the Mean Squared Error (MSE) of cable residuals:
 
@@ -75,20 +58,24 @@ Sequential Least Squares Programming (SLSQP) is used to update the position real
 
 ### Control Approaches & Trade-offs
 **Kinematic Velocity Control**: Combines a linear trajectory generator with closed-loop cable correction:
+
 $$\dot{l}_{\text{desired}} = \dot{l}_{\text{traj}} + K_p(l_{\text{ideal}} - l_{\text{actual}})$$
+
 *Performance:* Achieved sub-centimeter positional accuracy across **98.7%** of the workspace.
 
-2. **Force-Based Dynamic Control**: Evaluated using a Torque Distribution Algorithm utilizing the structure matrix null space $S \cdot \mathbf{t} = \mathbf{u}$:
-   $$\mathbf{t}_{\text{desired}} = \mathbf{t}^\dagger + \lambda \mathbf{n}$$
-   *Outcome:* Significant internal gear friction within high-reduction servo motors (272.5:1 ratio) led to asymmetric forces, limiting the accurate workspace area to 13.5%. Kinematic velocity control was selected for production integration.
+**Force-Based Dynamic Control**: Evaluated using a Torque Distribution Algorithm utilizing the structure matrix null space $S \cdot \mathbf{t} = \mathbf{u}$:
+
+$$\mathbf{t}_{\text{desired}} = \mathbf{t}^\dagger + \lambda \mathbf{n}$$
+
+*Outcome:* Significant internal gear friction within high-reduction servo motors (272.5:1 ratio) led to asymmetric forces, limiting the accurate workspace area to 13.5%. Kinematic velocity control was selected for production integration.
 
 ---
 
-## 2. Plant Perception & Leaf Detection
+## Plant Perception & Leaf Detection
 
 Target identification requires isolating withered yellow leaves from vibrant background foliage under fluctuating natural lighting conditions.
 
-<img width="962" height="593" alt="image" src="https://github.com/user-attachments/assets/c369613c-951d-4324-ba9c-7a32624658e4" />
+<img height="450" alt="image" src="https://github.com/user-attachments/assets/c369613c-951d-4324-ba9c-7a32624658e4" />
 
 
 
@@ -110,11 +97,14 @@ Point clouds are sequentially transformed through end-effector frame $\{E\}$ int
 
 ---
 
-## 3. Leaf Pruning Manipulator
+## Leaf Pruning Manipulator
 
 Executing leaf removal requires a compact, targeted mechanical system mounted directly on the CDPR end-effector platform.
 
-<img width="517" height="490" alt="image" src="https://github.com/user-attachments/assets/0ab2e236-fb35-4a6f-9abb-c35285865770" />
+<img height="250" alt="image" src="https://github.com/user-attachments/assets/0ab2e236-fb35-4a6f-9abb-c35285865770" />
+<img height="250" alt="image" src="https://github.com/user-attachments/assets/a5fd6b90-c0b7-47a8-bced-042be668b0d3" />
+<img height="250" alt="image" src="https://github.com/user-attachments/assets/28acb066-7e4d-4685-9da5-604d4ee9a7aa" />
+
 
 
 ### Mechanical Design & Strategy
@@ -128,7 +118,7 @@ Executing leaf removal requires a compact, targeted mechanical system mounted di
 
 The system integrates path planning, vision processing, and end-effector motion into an automated loop:
 
-<img width="872" height="379" alt="image" src="https://github.com/user-attachments/assets/e454402d-0db3-4abe-90bd-0f27a489d994" />
+<img height="280" alt="image" src="https://github.com/user-attachments/assets/e454402d-0db3-4abe-90bd-0f27a489d994" />
 
 
 1. **Coverage Raster Scan**: The CDPR traverses the wall face following optimized overlapping horizontal scanning rows.
